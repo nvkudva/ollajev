@@ -138,7 +138,7 @@ select { width: auto; }
 
 .bar { flex: none; border-bottom: 1px solid var(--rule); background: var(--surface); padding: 14px 16px 12px; }
 .bar-inner { max-width: 1680px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 20px 32px; align-items: baseline; }
-.bar-head { flex: 1 1 720px; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.bar-head { flex: 999 1 720px; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
 .bar-title { display: flex; align-items: center; gap: 14px; }
 .lockup {
   flex: none; display: inline-flex; align-items: center; gap: 8px; color: var(--ink);
@@ -156,12 +156,14 @@ select { width: auto; }
   & b { font-family: var(--mono); font-weight: 400; color: var(--ink); }
 }
 
-.bar-aside { margin-left: auto; flex: none; align-self: center; }
+/* Beside the title the aside keeps its natural width: the title's large grow factor takes the free space. Once it
+   wraps onto its own line it is alone there, grows to the full width, and its columns stretch from the left. */
+.bar-aside { flex: 1 1 min-content; align-self: center; }
 
 /* Two rows of three: model, limits, API; then last run and theme. Values longer than their column are cut
    with an ellipsis, so a long model name or a new token count never reflows the header. */
 .readout {
-  display: grid; grid-template-columns: 30ch 32ch 16ch; gap: 8px 22px; margin: 0;
+  display: grid; grid-template-columns: minmax(30ch, 1fr) minmax(32ch, 1fr) minmax(16ch, 1fr); gap: 8px 22px; margin: 0;
 
   & div { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
   & dt { color: var(--muted); font-size: 11px; }
@@ -428,7 +430,6 @@ footer a { color: var(--signal); }
   main { grid-template-columns: minmax(0, 1fr); }
   .shell { height: auto; min-height: 100%; }
   .panel { height: auto; min-height: 58vh; }
-  .bar-aside { margin-left: 0; width: 100%; }
   .readout { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 

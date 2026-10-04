@@ -610,13 +610,28 @@ function showModel() {
   link.textContent = repo || "the selected model";
 }
 
+// The model a request goes to when the page opens: one already in memory, so Send does not load another (the
+// saved pick if it is among them), else the server's default, else the last pick on this browser.
+function initialModel(names, loaded, defaultName, saved) {
+  const inMemory = loaded.filter((name) => names.includes(name));
+  if (inMemory.includes(saved)) return saved;
+  if (inMemory.length) return inMemory[0];
+  if (defaultName) return defaultName;
+  return names.includes(saved) ? saved : names[0] ?? "";
+}
+
 let models = [];
-fetch("/v1/models").then((r) => r.json()).then((body) => {
+Promise.all([
+  fetch("/v1/models").then((r) => r.json()),
+  fetch("/api/ps").then((r) => r.json()).catch(() => ({ models: [] })),
+]).then(([body, ps]) => {
   models = body.models ?? [];
   for (const m of models) modelSel.append(node(html`<option value="${m.name}">${m.name}${m.default ? " (default)" : ""}</option>`));
-  const saved = store.get("ollajev.model", "");
   if (!models.length) modelSel.append(node(html`<option value="">No models installed</option>`));
-  if (models.some((m) => m.name === saved)) modelSel.value = saved;
+  const names = models.map((m) => m.name);
+  const loaded = (ps.models ?? []).map((m) => m.name);
+  const pick = initialModel(names, loaded, models.find((m) => m.default)?.name, store.get("ollajev.model", ""));
+  if (pick) modelSel.value = pick;
   showModel();
 }).catch(() => {
   modelSel.append(node(html`<option value="">Could not load models</option>`));

@@ -60,7 +60,7 @@ class FakeServer:
 
 
 def test_serve_starts_the_server_inside_the_manager(app, monkeypatch):
-    monkeypatch.setattr(tui, "system_theme", lambda: "textual-dark")  # it runs a subprocess on macOS
+    monkeypatch.setattr(tui, "system_theme", lambda: "ansi-dark")  # it runs a subprocess on macOS
     monkeypatch.setattr(tui.subprocess, "Popen", FakeServer)
     monkeypatch.setattr(tui.Models, "downloaded", lambda self, name: True)  # s serves the selected model
     FakeServer.started = []
@@ -84,7 +84,7 @@ def test_serve_starts_the_server_inside_the_manager(app, monkeypatch):
 
 
 def test_quit_asks_before_stopping_a_running_server(app, monkeypatch):
-    monkeypatch.setattr(tui, "system_theme", lambda: "textual-dark")  # it runs a subprocess on macOS
+    monkeypatch.setattr(tui, "system_theme", lambda: "ansi-dark")  # it runs a subprocess on macOS
     monkeypatch.setattr(tui.subprocess, "Popen", FakeServer)
     monkeypatch.setattr(tui.Models, "downloaded", lambda self, name: True)
 
@@ -363,7 +363,7 @@ def test_options_accepts_only_host_names_and_addresses(host, valid):
 
 def shown_buttons(app):
     panel = app.query_one("#selection-panel")
-    return [str(button.label).split()[2] for button in panel.query("Button") if button.display]
+    return [str(button.label).split()[1] for button in panel.query("Button") if button.display]
 
 
 def test_the_selected_panel_has_the_cursor_rows_buttons(app):
@@ -428,9 +428,7 @@ def test_selected_panel_buttons_act_on_the_cursor_row(app):
     assert title == selected
 
 
-@pytest.mark.parametrize(
-    ("colours", "theme"), [("15;0", "textual-dark"), ("0;15", "textual-light"), ("0;7", "textual-light")]
-)
+@pytest.mark.parametrize(("colours", "theme"), [("15;0", "ansi-dark"), ("0;15", "ansi-light"), ("0;7", "ansi-light")])
 def test_theme_follows_the_terminal_colours(monkeypatch, colours, theme):
     monkeypatch.setenv("COLORFGBG", colours)
     monkeypatch.setattr(tui, "terminal_background", lambda: None)
@@ -439,9 +437,7 @@ def test_theme_follows_the_terminal_colours(monkeypatch, colours, theme):
     tui.system_theme.cache_clear()
 
 
-@pytest.mark.parametrize(
-    ("background", "theme"), [((1.0, 1.0, 1.0), "textual-light"), ((0.1, 0.1, 0.12), "textual-dark")]
-)
+@pytest.mark.parametrize(("background", "theme"), [((1.0, 1.0, 1.0), "ansi-light"), ((0.1, 0.1, 0.12), "ansi-dark")])
 def test_theme_follows_the_background_the_terminal_reports(monkeypatch, background, theme):
     monkeypatch.setattr(tui, "terminal_background", lambda: background)
     tui.system_theme.cache_clear()
@@ -517,14 +513,14 @@ def test_download_progress_also_drives_the_bar(app, monkeypatch):
     async def go():
         async with app.run_test(size=(160, 36)) as pilot:
             timer = await app.show_progress(resolved)
-            assert "show" in app.query_one("#job-bar").classes
+            assert "show" in app.query_one("#progress").classes
             on_disk["bytes"] = 500_000_000
             await pilot.pause(0.7)
             bar = app.query_one("#progress", ProgressBar)
             progress, status = bar.progress, str(app.query_one("#status").render())
             timer.stop()
             await pilot.pause()
-            return progress, status, "show" in app.query_one("#job-bar").classes
+            return progress, status, "show" in app.query_one("#progress").classes
 
     progress, status, shown_after_stop = asyncio.run(go())
     assert progress == 500_000_000
@@ -569,3 +565,64 @@ def test_logs_key_says_what_to_run_when_no_tab_can_open(app, monkeypatch):
 
     asyncio.run(go())
     assert len(notes) == 1 and "tail -F" in notes[0] and "server.log" in notes[0]
+
+
+@pytest.mark.parametrize("key", ["question_mark", "o"])
+def test_keys_and_settings_link_to_github(app, monkeypatch, key):
+    opened = []
+    monkeypatch.setattr(tui.dialogs.webbrowser, "open", opened.append)
+
+    async def go():
+        async with app.run_test(size=(160, 40)) as pilot:
+            await pilot.press(key)
+            await pilot.pause()
+            row = app.screen.query_one(".buttons")
+            first = row.children[0].id
+            await pilot.click("#do-github")
+            await pilot.pause()
+            return first
+
+    assert asyncio.run(go()) == "do-github"
+    assert opened == [tui.dialogs.GITHUB]
+
+
+@pytest.mark.parametrize(("seconds", "text"), [(45, "45s"), (754, "12m"), (3900, "1h 05m")])
+def test_time_left_is_coarse(seconds, text):
+    assert tui.duration(seconds) == text
+
+
+def test_status_row_says_cancelling_until_the_download_stops(app, monkeypatch):
+    import threading
+    import time
+    from types import SimpleNamespace
+
+    r = SimpleNamespace(repo_id="u/r", family=SimpleNamespace(runs_repo_code=False), ref=SimpleNamespace(name="u/r"))
+    started = threading.Event()
+
+    def resolve(name, online=True):
+        if not online:
+            raise LookupError(name)
+        return r
+
+    def download(r, cancel):
+        started.set()
+        cancel.wait(10)
+        time.sleep(1.5)  # a slow stop, past a few progress updates
+        raise tui.store.Cancelled
+
+    monkeypatch.setattr(tui.store, "resolve", resolve)
+    monkeypatch.setattr(tui.store, "download", download)
+    monkeypatch.setattr(tui.store, "download_size", lambda r: 0)
+    monkeypatch.setattr(tui, "canonical", lambda r: r.repo_id)
+
+    async def go():
+        async with app.run_test(size=(120, 36)) as pilot:
+            await pilot.press("p")
+            assert await asyncio.to_thread(started.wait, 5)
+            await pilot.press("escape")
+            await pilot.pause(1.0)
+            during = app.query_one("#status").render().plain
+            await app.workers.wait_for_complete()
+            return during
+
+    assert "Cancelling download" in asyncio.run(go())

@@ -5,6 +5,8 @@
 > **Run Jev-style decision models on your machine.** Pull a System One model from Hugging Face and
 > call it through the same `/v1/systemone` API as TypeSafe's hosted Jev.
 
+**[Product page](https://nvkudva.github.io/ollajev/)** · [Install](#install) · [Quick start](#quick-start) · [Models](#models) · [API](#api)
+
 A local server that runs **System One decision models** from Hugging Face behind TypeSafe's
 **Jev / System One** wire API.
 
@@ -80,6 +82,8 @@ ollajev run        # in another terminal: ask the model questions
   `ollajev setup` (or `ollajev tui`) to open it again.
 - The demo page opens at <http://127.0.0.1:8000/demo>.
 
+![The ollajev model manager: a list of decision models with their status, size, runtime and language, and a Selected panel with Serve, Delete and Info buttons](assets/model-manager.png)
+
 ## Example
 
 ```sh
@@ -109,6 +113,9 @@ curl -s http://127.0.0.1:8000/v1/systemone -H 'content-type: application/json' -
 }
 ```
 
+With the default model this request took about 0.4 s warm (0.7 s for the first one) on an Apple
+M3 Max laptop: three answers from one forward pass, no tokens generated.
+
 Leave `model` out, or send `jev-latest` (typesafe-sdk's default), to use the default model.
 
 ## Models
@@ -132,11 +139,17 @@ The model manager lists these:
 | `SupersonicLabs/Julia-1` | 0.57 GB | PyTorch (CPU) | Multilingual | **2–20 options**, 8k tokens |
 | `com-kotobalabs/open-jev-deberta-v3-large` | 1.7 GB | PyTorch | English | **512 tokens** |
 | `jaredpalmer/kev-0.5b`, `kev-0.6b`, `kev-0.8b` | 1–1.7 GB with base | PyTorch | English | 255 options, 8k tokens |
-| `internlm/Intern-Decision-0.8B` | 1.7 GB | PyTorch | Multilingual | 62 options, 16 questions |
+| `jaredpalmer/kev-4b`, `kev-9b` | 9.5 / 19.5 GB with base | PyTorch | English | same |
+| `internlm/Intern-Decision-0.8B`, `-2B`, `-4B` | 1.7 / 4.5 / 9.1 GB | PyTorch | Multilingual | 62 options, 16 questions |
 | `llm-semantic-router/Decision-1.0-Kai-0.6B`, `-Lex-0.6B` | 2.3 GB | PyTorch | English | 255 options, **1024 tokens** |
+| `wfzyx/von` | 1.6 GB | PyTorch | English | 10 levels, 8k tokens |
+| `heman10x/rlcd-modernbert-151m` | 0.7 GB | PyTorch | English | **24 options**, **512 tokens** |
+| `alibiserikbay/JevK5`, `JevK5-2B` | 8.4 / 3.8 GB | PyTorch (llama.cpp for GGUF copies) | English | 255 options, 16 levels, 16k tokens |
+| `OmniJev/OneJev-0.8B`, `-4B` | 2.2 / 10.4 GB | PyTorch (llama.cpp for GGUF copies) | Multilingual | 255 options, 10 levels, 32k tokens |
+| `Cloudflare/clef-flash`, `clef` | 19.1 / 55 GB | PyTorch | Multilingual | 255 options, 16k tokens |
 
 Any other repo works when it belongs to one of these families (decider, laya, julia, open-jev, kev,
-intern-decision, decision1), for example a fine-tune or a bigger size. Requests over a model's
+intern-decision, decision1, von, rlcd, jevk5, onejev, clef), for example a fine-tune or a bigger size. Requests over a model's
 limits get a 422 before the model runs. `ollajev show <model>` prints them.
 
 ### Download, switch and remove models
@@ -196,7 +209,7 @@ Run `ollajev <command> --help` for options and an example.
 
 ### Model manager
 
-`ollajev setup` opens one screen for the model commands. Move with the arrow keys or the mouse. The Selected panel under the list shows the model at the cursor and buttons for what applies to it: Download for a model not on disk yet, then Serve, Default, Unload and Delete, and Info. The status row at the bottom lists the keys for that model. The menu bar at the top (Add, Filter, Settings, Keys, Quit) can be clicked or used with its keys. Every button shows its key in brackets before its label. Serve starts the server right there: a Server panel shows its address and model, with Demo, Logs, Restart and Stop; quitting the manager stops it. Logs follows the server log in a new terminal tab. The buttons in every dialog can be clicked too. The keys:
+`ollajev setup` opens one screen for the model commands. Move with the arrow keys or the mouse. The Selected panel under the list shows the model at the cursor and buttons for what applies to it: Download for a model not on disk yet, then Serve, Default, Unload and Delete, and Info. The status row at the bottom lists the keys for that model. The menu bar at the top (Add, Filter, Settings, Quit) can be clicked or used with its keys. Every button shows its key in brackets before its label. Serve starts the server right there: a Server panel shows its address and model, with Demo, Logs, Restart and Stop; quitting the manager stops it. Logs follows the server log in a new terminal tab. The buttons in every dialog can be clicked too. The keys:
 
 | Key | Same as | What it does |
 |---|---|---|
@@ -223,8 +236,10 @@ Run `ollajev <command> --help` for options and an example.
 | `q` | | quit |
 
 The Status column shows `default`, `loaded`, `downloaded` and `available` labels; a dimmed size is an estimate until the model
-is downloaded. The top bar shows whether a server is running. The colours follow your
-system's light or dark mode; pick another theme with Ctrl+P and it is remembered.
+is downloaded. The colours are your terminal's own: its background and its colour palette, so the screen follows
+whatever theme the terminal uses.
+
+### All commands
 
 | Command | What it does |
 |---|---|

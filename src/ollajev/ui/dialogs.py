@@ -22,23 +22,35 @@ from . import repl
 
 log = logging.getLogger(__name__)
 
+GITHUB = "https://github.com/nvkudva/ollajev"
+GITHUB_BUTTON = ("GitHub", "github", "default", "g")
+
 
 def label(text: str, key: str) -> str:
-    """A button's label with its key in brackets before it, dimmed: every button in the app shows its key the same way."""
+    """A button's label as [<key>] label, the key dimmed: every button in the app shows its key the same way."""
     return f"[dim]\\[{key}][/] {text}"
 
 
-def buttons(*specs: tuple[str, str, str, str], row_id: str | None = None) -> Horizontal:
-    """A row of clickable buttons, each (label, action, variant, key). A click runs the action its key would."""
-    row = [
-        Button(label(text, key), id=f"do-{action}", variant=variant, compact=True)  # type: ignore[arg-type]
-        for text, action, variant, key in specs
-    ]
+def buttons(
+    *specs: tuple[str, str, str, str], start: tuple[str, str, str, str] | None = None, row_id: str | None = None
+) -> Horizontal:
+    """A row of clickable buttons, each (label, action, variant, key), on the right; `start`, if given, on the left.
+    A click runs the action its key would."""
+
+    def button(text: str, action: str, variant: str, key: str) -> Button:
+        return Button(label(text, key), id=f"do-{action}", variant=variant, compact=True)  # type: ignore[arg-type]
+
+    row = [button(*spec) for spec in specs]
+    if start:
+        row = [button(*start), Static(classes="gap"), *row]
     return Horizontal(*row, classes="buttons", id=row_id)
 
 
 class Clickable:
     """Runs the action named by a `buttons` button, so the mouse does what the keys do."""
+
+    def action_github(self) -> None:
+        webbrowser.open(GITHUB)
 
     async def on_button_pressed(self, event: Button.Pressed) -> None:
         button_id = event.button.id or ""
@@ -58,7 +70,7 @@ class Prompt(Clickable, ModalScreen[str | None]):
         with Vertical(classes="dialog") as box:
             box.border_title = self.heading
             yield Input(placeholder=self.placeholder)
-            yield buttons(("✓ OK", "submit", "primary", "enter"), ("✕ Cancel", "cancel", "default", "esc"))
+            yield buttons(("OK", "submit", "primary", "enter"), ("Cancel", "cancel", "default", "esc"))
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         self.action_submit()
@@ -106,7 +118,7 @@ class AddModel(Clickable, ModalScreen[str | None]):
             yield Static("", id="note")
             with Horizontal(classes="buttons"):
                 yield Static("type to search · ↑↓ moves · enter picks · esc closes", classes="hint")
-                yield Button(label("✕ Cancel", "esc"), id="do-cancel", compact=True)
+                yield Button(label("Cancel", "esc"), id="do-cancel", compact=True)
 
     def on_mount(self) -> None:
         table = self.query_one("#results", DataTable)
@@ -218,7 +230,7 @@ class Confirm(Clickable, ModalScreen[bool]):
             box.border_title = self.heading
             yield Static(self.body)
             yes_variant = "primary" if self.default else "error"
-            yield buttons(("✓ Yes", "yes", yes_variant, "y"), ("✕ No", "no", "default", "n"))
+            yield buttons(("Yes", "yes", yes_variant, "y"), ("No", "no", "default", "n"))
 
     def on_mount(self) -> None:
         # The safe answer has the focus, so Enter (or a stray click on nothing) picks it.
@@ -235,20 +247,27 @@ class Confirm(Clickable, ModalScreen[bool]):
 
 
 class Info(Clickable, ModalScreen[None]):
-    BINDINGS: ClassVar = [("escape,enter,q", "close", "Close"), ("o", "open_link", "Open")]
+    BINDINGS: ClassVar = [("escape,enter,q", "close", "Close"), ("o", "open_link", "Open"), ("g", "github", "GitHub")]
 
-    def __init__(self, title: str, body: str | Text, danger: bool = False, link: str | None = None) -> None:
+    def __init__(
+        self, title: str, body: str | Text, danger: bool = False, link: str | None = None, about: bool = False
+    ) -> None:
+        """`about`: a wide dialog about the app itself, with the GitHub button at its bottom left."""
         super().__init__()
-        self.heading, self.body, self.danger, self.link = title, body, danger, link
+        self.heading, self.body, self.danger, self.link, self.about = title, body, danger, link, about
 
     def compose(self) -> ComposeResult:
-        with Vertical(classes="dialog danger" if self.danger else "dialog") as box:
+        classes = "dialog" + (" danger" if self.danger else "") + (" wide" if self.about else "")
+        with Vertical(classes=classes) as box:
             box.border_title = self.heading
             yield Static(self.body)
+            start = GITHUB_BUTTON if self.about else None
             if self.link:
-                yield buttons(("⧉ HF page", "open_link", "primary", "o"), ("✕ Close", "close", "default", "esc"))
+                yield buttons(
+                    ("HF page", "open_link", "primary", "o"), ("Close", "close", "default", "esc"), start=start
+                )
             else:
-                yield buttons(("✕ Close", "close", "primary", "esc"))
+                yield buttons(("Close", "close", "primary", "esc"), start=start)
 
     def action_open_link(self) -> None:
         if self.link:
@@ -274,7 +293,7 @@ def valid_host(host: str) -> bool:
 class Settings(Clickable, ModalScreen[dict[str, Any] | None]):
     """Server settings saved in the config file. An OLLAJEV_* environment variable still wins over a saved value."""
 
-    BINDINGS: ClassVar = [("escape", "cancel", "Cancel")]
+    BINDINGS: ClassVar = [("escape", "cancel", "Cancel"), ("g", "github", "GitHub")]
 
     def compose(self) -> ComposeResult:
         saved = config.load()
@@ -304,7 +323,9 @@ class Settings(Clickable, ModalScreen[dict[str, Any] | None]):
                     str(saved.get("max_loaded_models", 1)), id="max_loaded_models", type="integer", compact=True
                 )
             yield Static(f"Saved in {config.config_path()}; an OLLAJEV_* variable overrides it.", classes="hint")
-            yield buttons(("✓ Save", "save", "primary", "enter"), ("✕ Cancel", "cancel", "default", "esc"))
+            yield buttons(
+                ("Save", "save", "primary", "enter"), ("Cancel", "cancel", "default", "esc"), start=GITHUB_BUTTON
+            )
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         self.action_save()
@@ -372,7 +393,7 @@ class Ask(Clickable, ModalScreen[None]):
             yield Static("ctrl+s asks · esc closes · answers newest-first below", id="ask-hint")
             with VerticalScroll(id="answers-box"):
                 yield Static("", id="answers")
-            yield buttons(("▶ Ask", "send", "primary", "^s"), ("✕ Close", "close", "default", "esc"))
+            yield buttons(("Ask", "send", "primary", "^s"), ("Close", "close", "default", "esc"))
 
     def on_mount(self) -> None:
         self.show(f"Loading {self.model} …")

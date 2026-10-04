@@ -43,9 +43,9 @@ Screen { background: $background; }
 #brand { height: 1; margin: 0 1; padding: 0 1; background: $panel; }
 #brand-name { width: auto; text-style: bold; color: $accent; margin-right: 2; }
 #brand-gap { width: 1fr; }
-#brand Button.menu { width: auto; min-width: 0; padding: 0 1; background: transparent; border: none; }
-#brand Button.menu:hover { color: $accent; background: transparent; }
+#brand Button.menu { width: 14; min-width: 0; padding: 0; content-align: left middle; text-align: left; background: transparent; border: none; }
 #brand Button.menu:focus { background: transparent; text-style: none; }
+#brand Button.menu:hover { background: $primary 40%; }
 #models-panel {
     height: 1fr; margin: 0 1; background: $surface; border: round $primary 60%;
     border-title-color: $text; border-title-style: bold; border-subtitle-color: $text-muted;
@@ -55,10 +55,11 @@ DataTable > .datatable--header { background: $surface; color: $text-muted; text-
 DataTable > .datatable--cursor { background: $primary 30%; text-style: bold; }
 DataTable > .datatable--hover { background: $boost; }
 #empty { height: 1fr; content-align: center middle; color: $text-muted; background: $surface; display: none; }
-#job-bar { height: auto; margin: 0 1; padding: 0 1; background: $surface; display: none; }
-#job-bar.show { display: block; }
-#progress { height: 1; margin: 0 1; }
-#status { height: 1; margin: 0 1; padding: 0 1; background: $panel; color: $text-muted; }
+#status-row { height: 1; margin: 0 1; padding: 0 1; background: $panel; }
+#status { width: 1fr; height: 1; color: $text-muted; }
+#progress { width: 24; height: 1; margin-left: 2; display: none; }
+#progress.show { display: block; }
+#progress Bar { width: 1fr; }
 #status.error { color: $error; }
 #status.busy { color: $warning; }
 #status.ok { color: $success; }
@@ -92,13 +93,14 @@ ModalScreen { align: center middle; background: $background 60%; }
 .field Input, .field Select { width: 1fr; margin-bottom: 0; }
 .dialog TextArea { height: 6; margin-bottom: 1; }
 .buttons { height: auto; margin-top: 1; align-horizontal: right; }
-.buttons Button { width: auto; min-width: 0; padding: 0 1; margin-left: 1; background: transparent; border: none; }
-.buttons Button:hover { color: $accent; background: transparent; }
+.buttons Button { width: 14; min-width: 0; padding: 0; content-align: left middle; text-align: left; margin-left: 1; background: transparent; border: none; }
 .buttons Button:focus { text-style: bold; background: transparent; }
+.buttons Button:hover { background: $primary 40%; }
 .buttons Button.-primary { color: $accent; text-style: bold; }
 .buttons Button.-error { color: $error; text-style: bold; }
 .buttons Button.-success { color: $success; text-style: bold; }
 .buttons .hint { width: 1fr; margin-top: 0; }
+.buttons .gap { width: 1fr; }
 #answers-box { height: auto; max-height: 14; border: round $primary 40%; padding: 0 1; }
 #answers { color: $text; }
 #ask-hint { color: $text-muted; }
@@ -142,26 +144,37 @@ def terminal_background() -> tuple[float, float, float] | None:
 
 @functools.cache
 def system_theme() -> str:
-    """textual-light or textual-dark, from the terminal's own background colour when it answers, else what it
-    says in COLORFGBG, else the OS appearance. Asked once per process, before the app starts."""
+    """ansi-light or ansi-dark: Textual's themes that draw with the terminal's own background and palette, so the
+    app follows the terminal's colour theme. Light or dark is the terminal's own background colour when it answers,
+    else what it says in COLORFGBG, else the OS appearance. Asked once per process, before the app starts."""
     background_colour = terminal_background()
     if background_colour is not None:
         red, green, blue = background_colour
         luminance = 0.2126 * red + 0.7152 * green + 0.0722 * blue
-        return "textual-light" if luminance > 0.5 else "textual-dark"
+        return "ansi-light" if luminance > 0.5 else "ansi-dark"
     colours = os.environ.get("COLORFGBG", "")  # "15;0": foreground 15 on background 0
     background = colours.rpartition(";")[2]
     if background.isdigit():
-        return "textual-light" if int(background) in (7, 15) else "textual-dark"
+        return "ansi-light" if int(background) in (7, 15) else "ansi-dark"
     if sys.platform == "darwin":
         try:
             result = subprocess.run(
                 ["/usr/bin/defaults", "read", "-g", "AppleInterfaceStyle"], capture_output=True, text=True, timeout=1
             )
         except (OSError, subprocess.SubprocessError):
-            return "textual-dark"
-        return "textual-dark" if result.stdout.strip() == "Dark" else "textual-light"
-    return "textual-dark"
+            return "ansi-dark"
+        return "ansi-dark" if result.stdout.strip() == "Dark" else "ansi-light"
+    return "ansi-dark"
+
+
+def duration(seconds: float) -> str:
+    """A time left, coarse: 45s, 12m, 1h 05m."""
+    seconds = int(seconds)
+    if seconds < 60:
+        return f"{seconds}s"
+    if seconds < 3600:
+        return f"{seconds // 60}m"
+    return f"{seconds // 3600}h {seconds % 3600 // 60:02d}m"
 
 
 def open_terminal(command: list[str]) -> bool:
@@ -220,30 +233,29 @@ class Row(NamedTuple):
 # App actions on the top bar as (key, label, action): these on the left, MENU_END on the right.
 # Actions on one model live in the Selected panel, on the server in the Server panel.
 MENU = [
-    ("n", "+ Add", "add"),
-    ("/", "▽ Filter", "filter"),
+    ("n", "Add", "add"),
+    ("/", "Filter", "filter"),
 ]
 MENU_END = [
-    ("o", "⚙ Settings", "options"),
-    ("?", "⊞ Keys", "help"),
-    ("q", "⏻ Quit", "quit_app"),
+    ("o", "Settings", "options"),
+    ("q", "Quit", "quit_app"),
 ]
 
 
 # The Selected panel's buttons: (label, action, variant). Each shows only when it applies to the cursor row.
 SELECTION_BUTTONS = [
-    ("↓ Download", "pull", "primary", "p"),
-    ("▶ Serve", "serve_model", "success", "s"),
-    ("★ Default", "set_default", "default", "d"),
-    ("⏏ Unload", "unload", "default", "u"),
-    ("✕ Delete", "remove", "error", "x"),
-    ("ⓘ Info", "info", "default", "i"),
+    ("Download", "pull", "primary", "p"),
+    ("Serve", "serve_model", "success", "s"),
+    ("Default", "set_default", "default", "d"),
+    ("Unload", "unload", "default", "u"),
+    ("Delete", "remove", "error", "x"),
+    ("Info", "info", "default", "i"),
 ]
 SERVER_BUTTONS = [
-    ("🌐 Demo", "open_demo", "primary", "w"),
-    ("≡ Logs", "logs", "default", "l"),
-    ("↻ Restart", "restart_server", "default", "R"),
-    ("■ Stop", "stop_server", "error", "S"),
+    ("Demo", "open_demo", "primary", "w"),
+    ("Logs", "logs", "default", "l"),
+    ("Restart", "restart_server", "default", "R"),
+    ("Stop", "stop_server", "error", "S"),
 ]
 DESCRIPTIONS = {entry.name.partition(":")[0]: entry.description for entry in reversed(CATALOG)}
 
@@ -251,6 +263,7 @@ DESCRIPTIONS = {entry.name.partition(":")[0]: entry.description for entry in rev
 class Models(App[bool]):
     TITLE = "ollajev"
     CSS = CSS
+    ENABLE_COMMAND_PALETTE = False  # its main use is picking a theme; the app follows the terminal's instead
     # The status row shows the keys for the cursor row; ? lists them all.
     BINDINGS: ClassVar = [
         Binding("d", "set_default", "Default"),
@@ -311,8 +324,6 @@ class Models(App[bool]):
             panel.border_title = "Models"
             yield DataTable(cursor_type="row")
             yield Static("", id="empty")
-        with Horizontal(id="job-bar"):
-            yield ProgressBar(id="progress", total=100, show_eta=False)
         with Vertical(id="selection-panel") as selection_panel:
             selection_panel.border_title = "Selected"
             with Horizontal(id="selection-row"):
@@ -323,7 +334,9 @@ class Models(App[bool]):
             with Horizontal(id="server-row"):
                 yield Static("", id="server-info")
                 yield dialogs.buttons(*SERVER_BUTTONS)
-        yield Static("", id="status")
+        with Horizontal(id="status-row"):
+            yield Static("", id="status")
+            yield ProgressBar(id="progress", show_eta=False, show_percentage=False)
 
     @staticmethod
     def menu_item(key: str, text: str, action: str) -> Button:
@@ -338,31 +351,19 @@ class Models(App[bool]):
 
     def on_mount(self) -> None:
         asyncio.get_running_loop().set_default_executor(NoWaitExecutor())
-        self.theme = config.load().get("theme") or system_theme()
-        self.theme_changed_signal.subscribe(self, self.on_theme_change)
+        self.theme = system_theme()
         self.reload()
         self.say_idle()
         self.load_quants()
         self.load_downloads()
         self.set_interval(3, self.auto_refresh)
 
-    def on_theme_change(self, theme: Any) -> None:
-        """Redraw the rows in the new theme's colours. A theme picked with ctrl+p is kept for the next start;
-        picking the one that matches the system goes back to following the system."""
-        with config.edit() as data:
-            if theme.name == system_theme():
-                data.pop("theme", None)
-            else:
-                data["theme"] = theme.name
-        if self.snapshot_cache:
-            self.render_list(*self.snapshot_cache)
-
     def colour(self, role: str) -> str:
-        """A colour of the current theme (success, warning, error, accent, panel…) as a Rich colour. A light theme
-        gets a darker shade of text colours and button backgrounds, which would wash out on it otherwise."""
-        if not self.current_theme.dark and role in ("success", "warning", "error", "accent", "panel"):
-            role = f"{role}-darken-2" if role != "panel" else "panel-darken-1"
+        """A colour of the current theme (success, warning, error, accent…) as a Rich colour: one of the terminal's
+        own palette colours, as the theme is an ANSI one."""
         value = self.get_css_variables().get(role, "")
+        if value.startswith("ansi_"):
+            return value.removeprefix("ansi_")
         return value if value.startswith("#") else "default"
 
     @work(group="quants")
@@ -432,7 +433,7 @@ class Models(App[bool]):
         return Text("   ").join(Text.assemble((key, f"bold {accent}"), " ", (what, "dim")) for key, what in keys)
 
     def action_help(self) -> None:
-        self.push_screen(dialogs.Info("Keys", keys_help(self.colour("accent"))))
+        self.push_screen(dialogs.Info("Keys", keys_help(self.colour("accent")), about=True))
 
     def action_last_error(self) -> None:
         if self.last_error:
@@ -688,7 +689,6 @@ class Models(App[bool]):
 
     def action_reload_list(self) -> None:
         self.reload()
-        self.notify("Refreshed")
 
     def selected(self) -> str | None:
         table = self.query_one(DataTable)
@@ -747,13 +747,12 @@ class Models(App[bool]):
             self.last_error = None
             return result
         except store.Cancelled:
-            self.notify("Cancelled; a later pull resumes where it stopped", severity="warning")
+            self.notify("Download cancelled; the next pull resumes it", severity="warning")
             return None
         except Exception as exc:
             log.exception("%s failed", text)
             self.last_error = f"{text.rstrip(' …')} failed:\n{exc or type(exc).__name__}"
-            self.notify(str(exc) or type(exc).__name__, severity="error", timeout=10)
-            return None
+            return None  # say_idle puts it on the status row until the next job succeeds
         finally:
             self.busy = False
             self.reload()
@@ -762,7 +761,7 @@ class Models(App[bool]):
     def action_cancel_job(self) -> None:
         if self.downloading:
             self.cancel.set()
-            self.say("Cancelling …")
+            self.say("Cancelling download …")
         elif self.busy:
             self.notify("Only downloads can be cancelled", severity="warning")
         elif self.filter_text:
@@ -795,8 +794,8 @@ class Models(App[bool]):
         return resolved
 
     async def show_progress(self, resolved: store.Resolved) -> Any:
-        """Put the download's bytes, percent and speed on the status line and a bar under the list
-        every half second; returns the timer (stopping it also hides the bar)."""
+        """Put the download's bytes, percent, speed and time left on the status row, with a bar at its right end,
+        every half second; returns the timer (stopping it also hides the bar). An unknown size pulses the bar."""
         name = canonical(resolved)
         try:
             total = await asyncio.to_thread(store.download_size, resolved)
@@ -804,31 +803,29 @@ class Models(App[bool]):
             total = 0
         start = store.bytes_on_disk(resolved.repo_id)
         started = time.monotonic()
-        try:
-            bar = self.query_one("#progress", ProgressBar)
-            job_bar = self.query_one("#job-bar")
-            bar.update(total=total or 100, progress=0)
-            job_bar.add_class("show")
-        except Exception:
-            bar, job_bar = None, None  # type: ignore[assignment]
+        bar = self.query_one("#progress", ProgressBar)
+        bar.update(total=total or None, progress=0)
+        bar.add_class("show")
 
         def update() -> None:
+            if self.cancel.is_set():  # the download stops at its next check; say so until it does
+                self.say("Cancelling download …")
+                return
             done = store.bytes_on_disk(resolved.repo_id) - start
             speed = done / max(time.monotonic() - started, 0.001)
             if total:
                 percent = min(100, done * 100 // total)
                 amount = f"{dialogs.human(done)} / {dialogs.human(total)} · {percent}%"
+                left = f" · {duration((total - done) / speed)} left" if speed and done < total else ""
             else:
-                amount = dialogs.human(done)
-            self.say(f"Downloading {name}: {amount} · {dialogs.human(speed)}/s · esc cancels")
-            if bar is not None:
-                with contextlib.suppress(Exception):
-                    bar.update(total=total or 100, progress=min(done, total or done))
+                amount, left = dialogs.human(done), ""
+            self.say(f"Downloading {name}: {amount} · {dialogs.human(speed)}/s{left} · esc cancels")
+            with contextlib.suppress(Exception):  # the app may be closing
+                bar.update(progress=min(done, total) if total else done)
 
         def hide() -> None:
-            if job_bar is not None:
-                with contextlib.suppress(Exception):
-                    job_bar.remove_class("show")
+            with contextlib.suppress(Exception):
+                bar.remove_class("show")
 
         update()
         timer = self.set_interval(0.5, update)
@@ -849,7 +846,8 @@ class Models(App[bool]):
         name = self.selected()
         if not name:
             return
-        if not self.downloaded(name):
+        on_disk = self.downloaded(name)
+        if not on_disk:
             size = self.rows[name].size if name in self.rows else "an unknown size"
             question = dialogs.Confirm(
                 f"Download {name}?", f"It is {size}. It becomes the default model.", default=True
@@ -860,7 +858,8 @@ class Models(App[bool]):
         async def use() -> None:
             if resolved := await self.fetch(name):
                 config.update(default_model=canonical(resolved))
-                self.notify(f"{canonical(resolved)} is now the default")
+                if not on_disk:  # a finished download is news; the new default shows in the list and panel
+                    self.notify(f"Downloaded {canonical(resolved)}; it is now the default")
 
         await self.job(f"Preparing {name} …", use)
 
@@ -872,7 +871,6 @@ class Models(App[bool]):
             self.notify("Download it first (p or Enter)", severity="warning")
             return
         config.update(default_model=canonical_or(name))
-        self.notify(f"{canonical_or(name)} is now the default")
         self.reload()
 
     @work
@@ -913,11 +911,9 @@ class Models(App[bool]):
         if not name or self.refuse_while_busy():
             return
         if client.server_running():
-            reply = await asyncio.to_thread(client.call, "POST", "/api/stop", {"model": name})
-            self.notify(reply["status"])
+            await asyncio.to_thread(client.call, "POST", "/api/stop", {"model": name})
         elif self.local and self.local[0] == name:
             await asyncio.to_thread(self.release)
-            self.notify(f"Unloaded {name}")
         else:
             self.notify(f"{name} is not loaded")
         self.reload()
@@ -943,7 +939,6 @@ class Models(App[bool]):
             else:
                 resolved = await asyncio.to_thread(store.resolve, lookup(name), online=False)
                 await asyncio.to_thread(store.remove, resolved)
-            self.notify(f"Deleted {name}")
 
         await self.job(f"Deleting {name} …", remove)
 
@@ -1004,8 +999,8 @@ class Models(App[bool]):
     async def action_options(self) -> None:
         if values := await self.push_screen_wait(dialogs.Settings()):
             config.update(**values)
-            restart = " Restart the server to use them." if self.server_alive() else ""
-            self.notify(f"Settings saved.{restart}")
+            if self.server_alive():
+                self.notify("Restart the server (R) to use the new settings")
 
     @work
     async def action_service(self) -> None:
@@ -1051,7 +1046,6 @@ class Models(App[bool]):
         )
         console.close()  # the child holds its own handle
         self.server_model = model
-        self.notify(f"Starting the server for {model} …")
         self.show_server_panel(False, set())
 
     @work(thread=True, exclusive=True, group="server")
@@ -1096,7 +1090,7 @@ class Models(App[bool]):
     def action_open_demo(self) -> None:
         """Open the demo page of the running server in the browser."""
         if not client.server_running():
-            self.notify("Start the server first (s, or ▶ Serve on a model)", severity="warning")
+            self.notify("Start the server first (s, or Serve on a model)", severity="warning")
             return
         webbrowser.open(f"{client.server_url()}/demo")
 
@@ -1188,7 +1182,6 @@ KEYS: list[tuple[str, list[tuple[str, str, str]]]] = [
             ("ctrl+r", "refresh the list", ""),
             ("e", "the last error in full", ""),
             ("esc", "cancel a running download first, else clear the filter", ""),
-            ("ctrl+p", "pick a colour theme", ""),
             ("q", "quit (asks first when busy)", ""),
         ],
     ),
