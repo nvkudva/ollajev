@@ -57,7 +57,7 @@ class _Laya:
             from .. import store
 
             # A copy's config and tokenizer come from its base's snapshot; the graph stays in the copy's.
-            config_dir = (store.local_path(resolved.base) if resolved.base else None) or path
+            config_dir = store.base_snapshot(resolved) or path
             agent = _onnx_agent(config_dir, os.path.join(path, resolved.weights))
             backend = runs_on = "onnxruntime"
         else:

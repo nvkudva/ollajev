@@ -53,18 +53,26 @@ def parse(name: str) -> Ref:
     return Ref(repo_id, tag or None)
 
 
+# One vocabulary each, shared by the file-name matchers below and the bare-tag matcher in runtime_of.
+_QUANT = r"I?Q\d[\w]*|BF16|F16|F32"
+_PRECISION = r"fp16|fp32|bf16|int8|uint8|int4|q4|q4f16|q8|bnb4|quantized"
+
+
 def quant_of(filename: str) -> str | None:
     """`decider-4b-v2.1-Q4_K_M.gguf` or `laya_english_ud_q4_k_m.gguf` -> `Q4_K_M`."""
-    match = re.search(r"[._-]((?:I?Q\d[\w]*)|BF16|F16|F32)\.gguf$", filename, re.IGNORECASE)
+    match = re.search(rf"[._-]({_QUANT})\.gguf$", filename, re.IGNORECASE)
     return match.group(1).upper() if match else None
 
 
 def precision_of(filename: str) -> str | None:
     """`model_fp16.onnx`, `model-int8.onnx` or `laya.int8.onnx` -> `fp16` / `int8`; None for `model.onnx`."""
-    match = re.search(
-        r"[._-](fp16|fp32|bf16|int8|uint8|int4|q4|q4f16|q8|bnb4|quantized)\.onnx$", filename, re.IGNORECASE
-    )
+    match = re.search(rf"[._-]({_PRECISION})\.onnx$", filename, re.IGNORECASE)
     return match.group(1).lower() if match else None
+
+
+def _is_tag(pattern: str, tag: str | None) -> bool:
+    """Whether a bare `<repo>:<tag>` tag is a quant/precision name (no file extension to read)."""
+    return re.fullmatch(pattern, tag or "", re.IGNORECASE) is not None
 
 
 def tag_of(filename: str) -> str | None:
@@ -91,10 +99,9 @@ def runtime_of(tag: str | None) -> str:
     """The runtime a `<repo>:<tag>` name runs on: llama.cpp for a GGUF file or quant tag, ONNX Runtime for an
     export, PyTorch for the repo's full weights."""
     if tag:
-        # quant_of and precision_of read file names; a bare tag is that name without its extension.
-        if format_of(tag) == "gguf" or quant_of(f"-{tag}.gguf"):
+        if format_of(tag) == "gguf" or _is_tag(_QUANT, tag):
             return RUNTIMES["gguf"]
-        if format_of(tag) == "onnx" or precision_of(f"-{tag}.onnx"):
+        if format_of(tag) == "onnx" or _is_tag(_PRECISION, tag):
             return RUNTIMES["onnx"]
     return RUNTIMES["safetensors"]
 

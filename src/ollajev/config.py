@@ -74,10 +74,15 @@ def models_dir() -> str | None:
     return os.environ.get("OLLAJEV_MODELS") or None
 
 
+def _setting(env: str, key: str, default: Any) -> Any:
+    """An OLLAJEV_* environment variable, else the saved setting, else the default."""
+    return os.environ.get(env) or load().get(key) or default
+
+
 def keep_alive() -> float:
     """Seconds an idle model stays loaded: OLLAJEV_KEEP_ALIVE, else the saved setting, else 5m. Accepts 300, 5m,
     1h, or -1 for forever."""
-    value = os.environ.get("OLLAJEV_KEEP_ALIVE") or load().get("keep_alive") or "5m"
+    value = _setting("OLLAJEV_KEEP_ALIVE", "keep_alive", "5m")
     try:
         return parse_duration(value)
     except ValueError:
@@ -86,7 +91,7 @@ def keep_alive() -> float:
 
 def max_loaded_models() -> int:
     """How many models stay in memory at once: OLLAJEV_MAX_LOADED_MODELS, else the saved setting, else 1."""
-    value = os.environ.get("OLLAJEV_MAX_LOADED_MODELS") or load().get("max_loaded_models") or 1
+    value = _setting("OLLAJEV_MAX_LOADED_MODELS", "max_loaded_models", 1)
     try:
         return int(value)
     except ValueError:
@@ -103,7 +108,7 @@ def max_body_bytes() -> int:
 
 def device() -> str | None:
     """OLLAJEV_DEVICE, else the device saved by setup, forces cpu, mps or cuda; None picks the best one."""
-    value = os.environ.get("OLLAJEV_DEVICE") or load().get("device")
+    value = _setting("OLLAJEV_DEVICE", "device", None)
     return None if value in (None, "", "auto") else value
 
 

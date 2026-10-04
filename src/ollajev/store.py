@@ -414,6 +414,12 @@ def _pick(ref: Ref, files: list[str]) -> str | None:
     return None
 
 
+def base_snapshot(resolved: Resolved) -> str | None:
+    """The base snapshot a quantized copy reads config and tokenizer files from, or None for a plain repo
+    (or until the base files are on disk)."""
+    return local_path(resolved.base) if resolved.base else None
+
+
 def local_path(resolved: Resolved) -> str | None:
     """The snapshot folder holding `r`'s weights, or None until it and, for a copy, its base files are on disk."""
     if resolved.base and local_path(resolved.base) is None:

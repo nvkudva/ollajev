@@ -226,7 +226,7 @@ class _JevK5:
         if resolved.weights:
             from .. import store
 
-            config_dir = (store.local_path(resolved.base) if resolved.base else None) or path
+            config_dir = store.base_snapshot(resolved) or path
             engine: Any = _Llama(os.path.join(path, resolved.weights))
             backend, device = "llama.cpp", "llama.cpp"
         else:

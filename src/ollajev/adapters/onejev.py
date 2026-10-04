@@ -288,7 +288,7 @@ class _OneJev:
         if resolved.base or resolved.weights:
             from .. import store
 
-            tokenizer_dir = store.local_path(resolved.base) if resolved.base else path
+            tokenizer_dir = store.base_snapshot(resolved) if resolved.base else path
             if tokenizer_dir is None:
                 raise LookupError(f"the base files of {resolved.name} are not downloaded")
             predict, close = _gguf_engine(os.path.join(path, resolved.weights), tokenizer_dir)
