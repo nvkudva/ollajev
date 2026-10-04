@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import secrets
 import time
@@ -168,11 +169,11 @@ async def ui_presets() -> dict[str, Any]:
 
 
 @app.get("/v1/models")
-def list_models() -> dict[str, Any]:
+async def list_models() -> dict[str, Any]:
     """Every downloaded model, default first. TypeSafe clients read name, description and release_date."""
     default = default_model()
     out = []
-    for m in admin.tags():
+    for m in await asyncio.to_thread(admin.tags):
         out.append(
             {
                 "name": m["name"],

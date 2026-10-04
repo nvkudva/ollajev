@@ -61,7 +61,7 @@ def cmd_pull(args: argparse.Namespace) -> None:
 
 
 def cmd_list(args: argparse.Namespace) -> None:
-    from ..server.admin import tags
+    from ..library import tags
 
     rows = tags()
     if not rows:
