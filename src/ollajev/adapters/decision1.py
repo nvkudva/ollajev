@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from . import instructions_or_name
+from . import wire_questions
 from .base import Loaded
 
 LIMITS = {"max_options": 255, "max_levels": 10, "max_tokens": 1024}
@@ -29,13 +29,7 @@ class _Decision1:
         model = AutoModel.from_pretrained(path, trust_remote_code=True, device=device or "cpu", local_files_only=True)
 
         def predict(state: Any, questions: dict[str, dict[str, Any]]) -> dict[str, Any]:
-            qs = {}
-            for qid, q in questions.items():
-                out = {"type": q["type"], "instructions": instructions_or_name(qid, q)}
-                if q.get("criteria") is not None:
-                    out["criteria"] = q["criteria"]
-                qs[qid] = out
-            return model.system_one(state=state, questions=qs)
+            return model.system_one(state=state, questions=wire_questions(questions))
 
         return Loaded(
             resolved.name, "Decision-1.0 Vela-encoder typed-decision model", None, self.limits(resolved), predict

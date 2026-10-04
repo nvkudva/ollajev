@@ -13,7 +13,7 @@ import re
 from typing import Any
 
 from .. import names
-from . import instructions_or_name
+from . import wire_questions
 from .base import Loaded
 
 # Context lengths from the model cards; laya does not expose them.
@@ -71,13 +71,7 @@ class _Laya:
             backend, runs_on = f"PyTorch {device}", None
 
         def predict(state: Any, questions: dict[str, dict[str, Any]]) -> dict[str, Any]:
-            qs = {}
-            for qid, q in questions.items():
-                out = {"type": q["type"], "instructions": instructions_or_name(qid, q)}
-                if q.get("criteria") is not None:
-                    out["criteria"] = q["criteria"]
-                qs[qid] = out
-            return agent.system_one(state, qs)
+            return agent.system_one(state, wire_questions(questions))
 
         return Loaded(
             resolved.name,

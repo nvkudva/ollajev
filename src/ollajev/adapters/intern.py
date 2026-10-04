@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from . import import_from, instructions_or_name
+from . import import_from, wire_questions
 from .base import Loaded
 
 LIMITS = {"max_options": 62, "max_levels": 62, "max_questions": 16, "max_tokens": 8192, "languages": "Multilingual"}
@@ -33,17 +33,11 @@ class _Intern:
         engine = DecisionEngine(path, device=device, dtype="float32" if device == "cpu" else "bfloat16")
 
         def predict(state: Any, questions: dict[str, dict[str, Any]]) -> dict[str, Any]:
-            qs = {}
+            qs = wire_questions(questions)
             for qid, q in questions.items():
-                out = {"type": q["type"], "instructions": instructions_or_name(qid, q)}
-                crit: Any = q.get("criteria")
                 if q["type"] == "choice":
-                    crit = {
-                        n: "" if d is None else d for n, d in crit.items()
-                    }  # None would be rendered as the text "None"
-                if crit is not None:
-                    out["criteria"] = crit
-                qs[qid] = out
+                    # None would be rendered as the text "None"
+                    qs[qid]["criteria"] = {n: "" if d is None else d for n, d in q["criteria"].items()}
             return engine.predict({"state": state, "questions": qs})
 
         return Loaded(

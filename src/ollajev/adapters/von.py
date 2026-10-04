@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from . import has, instructions_or_name, text_state
+from . import has, text_state, wire_questions
 from .base import Loaded
 
 LIMITS = {"max_levels": 10, "max_tokens": 8192, "languages": "English"}
@@ -28,13 +28,7 @@ class _EncoderFromConfig:
 
 def questions_for(questions: dict[str, dict[str, Any]]) -> dict[str, Any]:
     """Wire questions in the SDK's shape: instructions are required there."""
-    qs: dict[str, Any] = {}
-    for qid, q in questions.items():
-        out = {"type": q["type"], "instructions": instructions_or_name(qid, q)}
-        if q.get("criteria") is not None:
-            out["criteria"] = q["criteria"]
-        qs[qid] = out
-    return qs
+    return wire_questions(questions)
 
 
 def answers_from(response: Any) -> dict[str, Any]:

@@ -98,6 +98,18 @@ def instructions_or_name(qid: str, question: dict[str, Any]) -> Any:
     return question.get("instructions") if question.get("instructions") not in (None, "") else qid.replace("_", " ")
 
 
+def wire_questions(questions: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """Jev questions -> each model's `{type, instructions, criteria}`: instructions fall back to the
+    question id, and None criteria are dropped (Jev leaves them optional)."""
+    qs: dict[str, Any] = {}
+    for qid, q in questions.items():
+        out: dict[str, Any] = {"type": q["type"], "instructions": instructions_or_name(qid, q)}
+        if q.get("criteria") is not None:
+            out["criteria"] = q["criteria"]
+        qs[qid] = out
+    return qs
+
+
 def has(files: list[str], *names: str) -> bool:
     present = {Path(f).name for f in files} | set(files)
     return all(n in present for n in names)

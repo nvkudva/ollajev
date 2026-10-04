@@ -28,6 +28,9 @@ from .adapters import Family, detect, families
 from .names import Ref, parse
 
 IPV6_PROBE_SECONDS = 1.5
+HF_TIMEOUT = 10  # seconds: a slow Hub lookup must not hold up a search or listing
+SEARCH_POOL = 16  # base repos fetched in parallel when a search needs files they have
+SEARCH_CANDIDATES = 100  # most-downloaded matches checked for support before ranking
 
 
 def _ipv6_reaches(host: str) -> bool:
@@ -300,7 +303,7 @@ def _repo_files(repo_id: str) -> tuple[str, ...]:
     """A repo's file names, or none when Hugging Face does not answer within 10 s: a slow lookup of a base repo
     must not hold up a search, and its copies then just show as unsupported."""
     try:
-        info = HfApi().model_info(repo_id, expand=["siblings"], timeout=10)
+        info = HfApi().model_info(repo_id, expand=["siblings"], timeout=HF_TIMEOUT)
     except (RepositoryNotFoundError, httpx.HTTPError):
         return ()
     return tuple(s.rfilename for s in info.siblings or [])
@@ -311,7 +314,7 @@ def listing(repo_id: str) -> tuple[int | None, str | None]:
     """A repo's download count and the family that runs it, in one call; (None, None) when Hugging Face does not
     answer within 10 s. A model list needs both per repo."""
     try:
-        info = HfApi().model_info(repo_id, expand=["downloads", "siblings", "baseModels"], timeout=10)
+        info = HfApi().model_info(repo_id, expand=["downloads", "siblings", "baseModels"], timeout=HF_TIMEOUT)
     except (RepositoryNotFoundError, httpx.HTTPError):
         return None, None
     family = _family(repo_id, [s.rfilename for s in info.siblings or []], getattr(info, "base_models", None))
@@ -333,7 +336,9 @@ def search(query: str, limit: int = 40) -> list[Hit]:
         # ids alone took 13 s and then reading each repo's files took another call per repo.
         found = [
             model
-            for model in api.list_models(search=max(words, key=len), sort="downloads", limit=100, expand=expand)
+            for model in api.list_models(
+                search=max(words, key=len), sort="downloads", limit=SEARCH_CANDIDATES, expand=expand
+            )
             if all(word in model.id.lower() for word in words)
         ]
 
@@ -346,7 +351,7 @@ def search(query: str, limit: int = 40) -> list[Hit]:
         for base_id in _quantized_from(getattr(model, "base_models", None))
         if base_id not in files_by_repo
     }
-    with ThreadPoolExecutor(16) as pool:
+    with ThreadPoolExecutor(SEARCH_POOL) as pool:
         files_by_repo.update(zip(missing, pool.map(_repo_files, missing), strict=True))
 
     def hit(model) -> Hit:

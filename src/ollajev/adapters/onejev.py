@@ -53,6 +53,10 @@ _SPLIT |= {"JF", "JG", "JH", "JL", "JN", "JQ"}
 
 
 # A..Z, then the two-letter labels the Qwen tokenizer holds as one token: 255 slots, TypeSafe's choice limit.
+MAX_SLOTS = 255
+LLAMA_BATCH = 2048  # prompt tokens per llama.cpp batch; the prefix is fed once, then cached
+
+
 def _slots() -> list[str]:
     slots = list(LETTERS)
     for first in LETTERS:
@@ -60,7 +64,7 @@ def _slots() -> list[str]:
             label = first + second
             if label not in _SPLIT:
                 slots.append(label)
-    return slots[:255]
+    return slots[:MAX_SLOTS]
 
 
 SLOTS = _slots()
@@ -237,7 +241,7 @@ def _gguf_engine(gguf: str, tokenizer_dir: str):
 
     tok = transformers.AutoTokenizer.from_pretrained(tokenizer_dir)
     prompts = _Prompts(tok)
-    llm = llama_cpp.Llama(gguf, n_ctx=LIMITS["max_tokens"], n_batch=2048, n_gpu_layers=-1, verbose=False)
+    llm = llama_cpp.Llama(gguf, n_ctx=LIMITS["max_tokens"], n_batch=LLAMA_BATCH, n_gpu_layers=-1, verbose=False)
     sample = prompts.render({"task": "Pay the invoice"}, "Question: Is it paid?\n\nOptions:\nA. yes\nB. no")
     if llm.tokenize(sample.encode(), add_bos=False, special=True) != prompts.encode(sample):
         raise ValueError(f"{os.path.basename(gguf)} does not use the OneJev tokenizer of its base repo")

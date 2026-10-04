@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import json
 import os
-import urllib.error
-import urllib.request
 from typing import Any
+
+import httpx
 
 from . import config
 
@@ -27,21 +26,25 @@ def auth_headers() -> dict[str, str]:
 
 
 def call(method: str, path: str, body: dict[str, Any] | None = None, timeout: float = 600) -> Any:
-    data = json.dumps(body).encode() if body is not None else None
-    req = urllib.request.Request(server_url() + path, data=data, method=method, headers=auth_headers())
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return json.loads(resp.read() or b"null")
-    except urllib.error.HTTPError as exc:
-        payload = json.loads(exc.read() or b"{}")
+        resp = httpx.request(
+            method, server_url() + path, json=body, headers=auth_headers(), timeout=timeout, follow_redirects=True
+        )
+        resp.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        try:
+            payload = exc.response.json()
+        except ValueError:
+            payload = {}
         raise SystemExit(f"error: {payload.get('error') or payload.get('detail') or exc}") from None
+    return resp.json() if resp.content else None
 
 
 def server_running() -> bool:
     try:
-        urllib.request.urlopen(server_url() + "/", timeout=0.5).close()
+        httpx.get(server_url() + "/", timeout=0.5, follow_redirects=True).raise_for_status()
         return True
-    except (urllib.error.URLError, OSError):
+    except httpx.HTTPError:
         return False
 
 

@@ -14,10 +14,10 @@ import socket
 import sys
 import threading
 import time
-import urllib.error
-import urllib.request
 import webbrowser
 from importlib.metadata import version
+
+import httpx
 
 from .. import client, config, store
 from ..manager import canonical, canonical_or, default_model, lookup
@@ -130,6 +130,10 @@ def cmd_stop(args: argparse.Namespace) -> None:
 
 # ---- serve ------------------------------------------------------------------------------------------
 
+LISTEN_BACKLOG = 128
+ANNOUNCE_TIMEOUT = 900  # seconds to wait for the server to answer before giving up the banner
+ANNOUNCE_POLL = 0.5  # seconds between readiness probes while the server starts
+
 
 def bind(host: str, port: int, scan: bool, tries: int = 50) -> tuple[socket.socket, int]:
     """Claim the port before the model loads, so a busy port fails in the first second."""
@@ -143,7 +147,7 @@ def bind(host: str, port: int, scan: bool, tries: int = 50) -> tuple[socket.sock
         except OSError:
             sock.close()
             continue
-        sock.listen(128)
+        sock.listen(LISTEN_BACKLOG)
         sock.set_inheritable(True)
         return sock, candidate
     if not scan:
@@ -273,13 +277,13 @@ def banner(base: str, model: str | None, log_file: str) -> str:
 
 
 def _announce_when_ready(base: str, model: str | None, open_browser: bool, log_file: str) -> None:
-    deadline = time.monotonic() + 900
+    deadline = time.monotonic() + ANNOUNCE_TIMEOUT
     while time.monotonic() < deadline:
         try:
-            urllib.request.urlopen(f"{base}/", timeout=1).close()
+            httpx.get(f"{base}/", timeout=1).raise_for_status()
             break
-        except (urllib.error.URLError, OSError):
-            time.sleep(0.5)
+        except httpx.HTTPError:
+            time.sleep(ANNOUNCE_POLL)
     else:
         return
     print(banner(base, model, log_file), flush=True)
