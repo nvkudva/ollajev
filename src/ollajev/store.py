@@ -298,27 +298,66 @@ def _family(repo_id: str, files: list[str], base_models: dict | None = None, fil
     return None
 
 
-@functools.lru_cache(maxsize=256)
+LOOKUP_TTL = 300.0  # seconds a repo's file list / listing is reused across searches
+_LOOKUP_MAX = 512  # repos held; beyond that expired entries go, then everything
+_repo_files_memo: dict[str, tuple[float, tuple[str, ...]]] = {}
+_listing_memo: dict[str, tuple[float, tuple[int | None, str | None]]] = {}
+_lookup_lock = threading.Lock()
+
+
+def _memo_get(memo: dict[str, tuple[float, Any]], repo_id: str, now: float) -> Any:
+    """A memoized value still within its TTL, else None (a miss, never a cached value: all values are tuples)."""
+    hit = memo.get(repo_id)
+    return hit[1] if hit is not None and now - hit[0] < LOOKUP_TTL else None
+
+
+def _memo_put(memo: dict[str, tuple[float, Any]], repo_id: str, value: Any, now: float) -> None:
+    if len(memo) >= _LOOKUP_MAX:
+        for key in [k for k, (at, _) in memo.items() if now - at >= LOOKUP_TTL]:
+            del memo[key]
+        if len(memo) >= _LOOKUP_MAX:
+            memo.clear()
+    memo[repo_id] = (now, value)
+
+
 def _repo_files(repo_id: str) -> tuple[str, ...]:
-    """A repo's file names, or none when Hugging Face does not answer within 10 s: a slow lookup of a base repo
-    must not hold up a search, and its copies then just show as unsupported."""
+    """A repo's file names, or none when Hugging Face does not answer in time: a slow lookup of a base repo
+    must not hold up a search, and its copies then just show as unsupported. Reused for LOOKUP_TTL seconds;
+    the lru_cache before it kept failures for the life of the process."""
+    now = time.monotonic()
+    with _lookup_lock:
+        hit = _memo_get(_repo_files_memo, repo_id, now)
+        if hit is not None:
+            return hit
     try:
         info = HfApi().model_info(repo_id, expand=["siblings"], timeout=HF_TIMEOUT)
     except (RepositoryNotFoundError, httpx.HTTPError):
-        return ()
-    return tuple(s.rfilename for s in info.siblings or [])
+        files: tuple[str, ...] = ()
+    else:
+        files = tuple(s.rfilename for s in info.siblings or [])
+    with _lookup_lock:
+        _memo_put(_repo_files_memo, repo_id, files, now)
+    return files
 
 
-@functools.lru_cache(maxsize=256)
 def listing(repo_id: str) -> tuple[int | None, str | None]:
     """A repo's download count and the family that runs it, in one call; (None, None) when Hugging Face does not
-    answer within 10 s. A model list needs both per repo."""
+    answer in time. A model list needs both per repo. Reused for LOOKUP_TTL seconds like _repo_files."""
+    now = time.monotonic()
+    with _lookup_lock:
+        hit = _memo_get(_listing_memo, repo_id, now)
+        if hit is not None:
+            return hit
     try:
         info = HfApi().model_info(repo_id, expand=["downloads", "siblings", "baseModels"], timeout=HF_TIMEOUT)
     except (RepositoryNotFoundError, httpx.HTTPError):
-        return None, None
-    family = _family(repo_id, [s.rfilename for s in info.siblings or []], getattr(info, "base_models", None))
-    return info.downloads or 0, family.name if family else None
+        found: tuple[int | None, str | None] = (None, None)
+    else:
+        family = _family(repo_id, [s.rfilename for s in info.siblings or []], getattr(info, "base_models", None))
+        found = (info.downloads or 0, family.name if family else None)
+    with _lookup_lock:
+        _memo_put(_listing_memo, repo_id, found, now)
+    return found
 
 
 def search(query: str, limit: int = 40) -> list[Hit]:
