@@ -239,19 +239,20 @@ def cmd_serve(args: argparse.Namespace) -> None:
             f"refusing to listen on {host}: the API can download, delete and load models, so it needs a key. "
             "Set OLLAJEV_API_KEY, or bind to 127.0.0.1."
         )
-    api.allowed_hosts = frozenset({"localhost", "127.0.0.1", "[::1]", host}) if config.is_loopback(host) else None
-
     args.log_file = args.log_file or str(config.log_dir() / "server.log")
     configure_logging(args.log_file)
     sock, port = bind(host, port, scan=not explicit)
     base = f"http://{client.url_host(host)}:{port}"
     config.update(server_url=base)
 
-    api.preload = preload_name(model)
-    if api.preload:  # the manager prints "Loading …" itself
-        api.pin_preload = True
+    name = preload_name(model)
+    api.configure(
+        preload_model=name,
+        pin_preload_model=bool(name),  # the manager prints "Loading …" itself
+        allowed=frozenset({"localhost", "127.0.0.1", "[::1]", host}) if config.is_loopback(host) else None,
+    )
     threading.Thread(
-        target=_announce_when_ready, args=(base, api.preload, not args.no_browser, args.log_file), daemon=True
+        target=_announce_when_ready, args=(base, name, not args.no_browser, args.log_file), daemon=True
     ).start()
     uvicorn.Server(uvicorn.Config(api.app, log_config=None, log_level="info")).run(sockets=[sock])
 

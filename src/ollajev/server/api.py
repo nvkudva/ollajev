@@ -84,6 +84,22 @@ pin_preload = False
 # Host header names `serve` accepts when bound to a loopback address; blocks DNS rebinding.
 # None means no check, as for a non-loopback bind (which requires an API key instead).
 allowed_hosts: frozenset[str] | None = None
+
+
+def configure(
+    *,
+    preload_model: str | None = None,
+    pin_preload_model: bool = False,
+    allowed: frozenset[str] | None = None,
+) -> None:
+    """Startup wiring for `serve`, in one call instead of poking module globals: what to load before
+    accepting connections, whether it stays loaded, and which Host headers a loopback bind accepts."""
+    global preload, pin_preload, allowed_hosts
+    preload = preload_model
+    pin_preload = pin_preload_model
+    allowed_hosts = allowed
+
+
 DEMO_CSP = (
     "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
     "object-src 'none'; base-uri 'none'; frame-ancestors 'none'"

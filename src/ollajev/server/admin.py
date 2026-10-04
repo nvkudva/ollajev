@@ -71,12 +71,17 @@ def api_ps() -> dict[str, Any]:
     return {"models": models}
 
 
+def _not_found(exc: LookupError) -> JSONResponse:
+    """An unknown model in the Ollama shape ({error}, not the TypeSafe detail list)."""
+    return JSONResponse(status_code=404, content={"error": str(exc)})
+
+
 @router.post("/show")
 def api_show(req: ModelRef) -> Any:
     try:
         resolved = store.resolve(lookup(req.model), online=False)
     except LookupError as exc:
-        return JSONResponse(status_code=404, content={"error": str(exc)})
+        return _not_found(exc)
     return {
         "model": canonical(resolved),
         "repo": resolved.repo_id,
@@ -198,7 +203,7 @@ def api_delete(req: ModelRef) -> Any:
     try:
         resolved = store.resolve(lookup(req.model), online=False)
     except LookupError as exc:
-        return JSONResponse(status_code=404, content={"error": str(exc)})
+        return _not_found(exc)
     api.current_manager().unload(canonical(resolved))
     return {"status": "success", "freed": store.remove(resolved)}
 
@@ -216,5 +221,5 @@ def api_stop(req: ModelRef) -> Any:
     try:
         resolved = store.resolve(lookup(req.model), online=False)
     except LookupError as exc:
-        return JSONResponse(status_code=404, content={"error": str(exc)})
+        return _not_found(exc)
     return {"status": "success" if api.current_manager().unload(canonical(resolved)) else "not loaded"}

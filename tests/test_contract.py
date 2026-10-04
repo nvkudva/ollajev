@@ -196,6 +196,15 @@ def test_limits_are_checked_before_the_model_runs():
         check_limits({"max_questions": 1}, {**questions, "d": {"type": "noul"}})
 
 
+def test_configure_sets_startup_state_and_resets_it():
+    try:
+        api.configure(preload_model="u/r", pin_preload_model=True, allowed=frozenset({"localhost"}))
+        assert (api.preload, api.pin_preload, api.allowed_hosts) == ("u/r", True, frozenset({"localhost"}))
+    finally:
+        api.configure()
+    assert (api.preload, api.pin_preload, api.allowed_hosts) == (None, False, None)
+
+
 def test_fresh_machine_without_a_model_cache_lists_no_models(client, tmp_path, monkeypatch):
     monkeypatch.setenv("OLLAJEV_MODELS", str(tmp_path / "never-created"))
     r = client.get("/v1/models")
