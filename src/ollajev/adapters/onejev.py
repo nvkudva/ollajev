@@ -11,12 +11,12 @@ from __future__ import annotations
 
 import copy
 import json
-import math
 import os
 import re
 from typing import Any
 
 from .. import names
+from . import softmax
 from .base import Loaded
 
 LIMITS = {"max_options": 255, "max_levels": 10, "max_tokens": 32768}
@@ -126,12 +126,6 @@ def messages(state: Any, suffix: str) -> list[dict[str, str]]:
         {"role": "system", "content": SYSTEM},
         {"role": "user", "content": f"<state>\n{state_text(state)}\n</state>\n\n{suffix}"},
     ]
-
-
-def softmax(logits: list[float]) -> list[float]:
-    top = max(logits)
-    weights = [math.exp(x - top) for x in logits]
-    return [x / sum(weights) for x in weights]
 
 
 def shape(question: dict[str, Any], labels: list[str], logits: list[float]) -> dict[str, Any]:

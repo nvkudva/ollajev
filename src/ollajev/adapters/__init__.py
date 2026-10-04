@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import math
 import sys
 import threading
 from pathlib import Path
@@ -108,6 +109,18 @@ def wire_questions(questions: dict[str, dict[str, Any]]) -> dict[str, Any]:
             out["criteria"] = q["criteria"]
         qs[qid] = out
     return qs
+
+
+def softmax(logits: list[float], temperature: float = 1.0) -> list[float]:
+    """Numerically stable softmax over letter logits; temperature 1 is the plain one.
+
+    Shared by the letter-logit readouts (jevk5 calibrated, onejev plain). The engines themselves
+    stay separate: cached prefix-continue vs fresh full-prompt forwards are different numerics.
+    """
+    top = max(logits)
+    weights = [math.exp((z - top) / temperature) for z in logits]
+    total = sum(weights)
+    return [w / total for w in weights]
 
 
 def has(files: list[str], *names: str) -> bool:

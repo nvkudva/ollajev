@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import ctypes
 import json
-import math
 import os
 import threading
 from pathlib import Path
@@ -18,7 +17,7 @@ from typing import Any
 
 from .. import names
 from .._vendor.jevk5 import prompt
-from . import instructions_or_name
+from . import instructions_or_name, softmax
 from .base import Loaded
 
 MAX_TOKENS = 16384  # the runtime refuses longer inputs rather than cutting them
@@ -53,13 +52,6 @@ def question(qid: str, question_spec: dict[str, Any]) -> dict[str, Any]:
     if question_spec["type"] == "choice" and isinstance(crit, list):
         crit = dict.fromkeys(crit)
     return {"type": question_spec["type"], "instructions": instructions_or_name(qid, question_spec), "criteria": crit}
-
-
-def softmax(logits: list[float], temperature: float) -> list[float]:
-    top = max(logits)
-    weights = [math.exp((z - top) / temperature) for z in logits]
-    total = sum(weights)
-    return [w / total for w in weights]
 
 
 def shaped(kind: str, probs: dict[str, float]) -> dict[str, Any]:
