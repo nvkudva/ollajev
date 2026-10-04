@@ -204,14 +204,16 @@ async def list_models() -> dict[str, Any]:
 
 
 @app.post("/v1/systemone")
-def system_one(req: Annotated[SystemOneRequest, Body()], response: Response) -> Any:
+async def system_one(req: Annotated[SystemOneRequest, Body()], response: Response) -> Any:
     questions = {name: _wire(q) for name, q in req.questions.items()}
     manager = current_manager()
     requested_at = time.time()
     try:
         started = time.monotonic()
         # One resolve: run() loads when needed, so no separate get() (which re-resolved offline) first.
-        slot, result = manager.run(req.model, req.state, questions)
+        # Inference blocks on the per-model slot lock, so it runs off the event loop and health/tags
+        # stay responsive while a question answers.
+        slot, result = await asyncio.to_thread(manager.run, req.model, req.state, questions)
         finished = time.monotonic()
         answers = normalize.answers(questions, result["answers"])
     except (NotDownloaded, NotTrusted, NotEnoughMemory) as exc:
