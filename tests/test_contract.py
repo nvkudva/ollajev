@@ -344,10 +344,10 @@ def test_a_quantized_onnx_copy_runs_on_the_laya_family(tmp_path, monkeypatch):
 def test_load_refuses_a_model_that_does_not_fit_in_free_memory(monkeypatch, tmp_path):
     from types import SimpleNamespace
 
-    from ollajev import manager, store
+    from ollajev import manager, registry, store
 
     (tmp_path / "m.safetensors").write_bytes(b"x" * 1000)
-    monkeypatch.setattr(store, "is_trusted", lambda r: True)
+    monkeypatch.setattr(registry, "is_trusted", lambda r: True)
     monkeypatch.setattr(store, "local_path", lambda r: str(tmp_path))
     monkeypatch.setattr(manager, "pick_device", lambda requested: "cpu")
     monkeypatch.setattr(manager, "free_memory", lambda device: 999)

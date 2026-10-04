@@ -15,7 +15,7 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
-from .. import config, store
+from .. import config, registry, store
 from ..library import tags
 from ..manager import canonical, lookup
 
@@ -89,8 +89,8 @@ def api_show(req: ModelRef) -> Any:
         "file": resolved.weights,
         "family": resolved.family.name,
         "runs_repo_code": resolved.family.runs_repo_code,
-        "trusted": store.is_trusted(resolved),
-        "release_date": store.released(resolved.repo_id),
+        "trusted": registry.is_trusted(resolved),
+        "release_date": registry.released(resolved.repo_id),
         "limits": resolved.family.limits(resolved),
         "path": store.local_path(resolved),
     }
@@ -159,7 +159,7 @@ def _pull(model: str, events: queue.Queue[dict[str, Any] | None]) -> None:
     try:
         events.put({"status": "pulling manifest"})
         resolved = store.resolve(lookup(model))
-        if resolved.family.runs_repo_code and not store.is_trusted(resolved):
+        if resolved.family.runs_repo_code and not registry.is_trusted(resolved):
             events.put({"error": _untrusted_message(resolved)})
             return
         if not _claim(resolved.repo_id):

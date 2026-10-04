@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 
-from ollajev import config, manager, store
+from ollajev import config, manager, registry, store
 from ollajev.names import parse
 from ollajev.server import admin, api
 from ollajev.ui import cli
@@ -229,10 +229,10 @@ def test_failed_download_leaves_no_pin(home, monkeypatch):
     r = SimpleNamespace(repo_id="u/r", revision="a" * 40, allow=None, created="2026-01-01", base=None)
     with pytest.raises(OSError):
         store.download(r)
-    assert store.pins() == {}
+    assert registry.pins() == {}
     monkeypatch.setattr(store, "snapshot_download", lambda *a, **k: "/x")
     store.download(r)
-    assert store.pins() == {"u/r": "a" * 40} and store.released("u/r") == "2026-01-01"
+    assert registry.pins() == {"u/r": "a" * 40} and registry.released("u/r") == "2026-01-01"
 
 
 def test_pull_stream_reports_bytes_as_the_cache_grows(client, monkeypatch):

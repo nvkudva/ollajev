@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from . import names, store
+from . import names, registry, store
 from .catalog import CATALOG
 from .manager import canonical
 
@@ -26,7 +26,7 @@ def _describe(name: str, resolved: store.Resolved, size: int, modified: float) -
         "digest": resolved.revision,
         "description": DESCRIPTIONS.get(name, f"{resolved.family.name} typed-decision model"),
         # TypeSafe clients require a string; fall back to the download date for repos pinned offline.
-        "release_date": store.released(resolved.repo_id) or datetime.fromtimestamp(modified, UTC).date().isoformat(),
+        "release_date": registry.released(resolved.repo_id) or datetime.fromtimestamp(modified, UTC).date().isoformat(),
         "details": {
             "family": resolved.family.name,
             "format": names.format_of(resolved.weights) if resolved.weights else "safetensors",
@@ -40,7 +40,7 @@ def tags() -> list[dict[str, Any]]:
     """One entry per downloaded weight file: a GGUF repo with two quants on disk is two models, and so is an ONNX
     repo with two exports."""
     out = []
-    pins = store.pins()  # one config read, not one per downloaded repo
+    pins = registry.pins()  # one config read, not one per downloaded repo
     for repo_id, (_, modified) in sorted(store.downloaded().items()):
         revision = pins[repo_id]
         rev = store.snapshot(repo_id, revision)

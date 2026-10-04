@@ -23,7 +23,7 @@ from huggingface_hub.utils import filter_repo_objects
 from huggingface_hub.utils import tqdm as hf_tqdm
 from huggingface_hub.utils._http import default_client_factory  # the Hub's stock client, to adjust
 
-from . import config, names
+from . import config, names, registry
 from .adapters import Family, detect, families
 from .names import Ref, parse
 
@@ -118,27 +118,6 @@ def refresh_scan_cache(cache_dir: str | None = None) -> None:
             _scan_memo = None
 
 
-def pins() -> dict[str, str]:
-    return config.load().get("pins", {})
-
-
-def _pin(repo_id: str, sha: str, created: str | None) -> None:
-    with config.edit() as data:
-        data.setdefault("pins", {})[repo_id] = sha
-        if created:
-            data.setdefault("released", {})[repo_id] = created
-
-
-def released(repo_id: str) -> str | None:
-    """The repo's creation date, reported as release_date like the hosted API does."""
-    return config.load().get("released", {}).get(repo_id)
-
-
-def bases() -> dict[str, dict[str, str]]:
-    """copy repo -> {"repo", "revision"} of the base it was resolved against, so copies resolve offline."""
-    return config.load().get("bases", {})
-
-
 def _quantized_from(base_models: dict | None) -> list[str]:
     """The repos Hugging Face lists as this repo's base when it is a quantization of them, else none."""
     if not base_models or base_models.get("relation") != "quantized":
@@ -184,7 +163,7 @@ def resolve(name: str, *, online: bool = True) -> Resolved:
     Offline (`online=False`) it uses only what is downloaded and raises LookupError otherwise.
     """
     ref = parse(name)
-    return _resolve(ref, pins().get(ref.repo_id), online=online, allow_base=True)
+    return _resolve(ref, registry.pins().get(ref.repo_id), online=online, allow_base=True)
 
 
 def _resolve(ref: Ref, revision: str | None, *, online: bool, allow_base: bool) -> Resolved:
@@ -242,7 +221,7 @@ def _base(repo_id: str, weights: str | None, files: list[str], base_ids: list[st
     whose family declines the file's layout makes this a LookupError that says so."""
     if weights is None:
         return None
-    recorded = bases().get(repo_id)
+    recorded = registry.bases().get(repo_id)
     candidates = [(recorded["repo"], recorded["revision"])] if recorded else [(b, None) for b in base_ids]
     declined = None
     for base_id, revision in candidates:
@@ -507,8 +486,8 @@ def download(resolved: Resolved, cancel: threading.Event | None = None) -> str:
                 "repo": resolved.base.repo_id,
                 "revision": resolved.base.revision,
             }
-    if resolved.repo_id not in pins():
-        _pin(resolved.repo_id, resolved.revision, resolved.created)
+    if resolved.repo_id not in registry.pins():
+        registry.pin(resolved.repo_id, resolved.revision, resolved.created)
     refresh_scan_cache(config.models_dir())
     return path
 
@@ -551,7 +530,7 @@ def on_disk(resolved: Resolved) -> int:
 
 def downloaded() -> dict[str, tuple[int, float]]:
     """repo_id -> (bytes on disk, last modified) for pinned repos in the cache."""
-    wanted = pins()
+    wanted = registry.pins()
     info = scan_cache_dir(config.models_dir())
     return {
         repo.repo_id: (repo.size_on_disk, repo.last_modified)
@@ -606,32 +585,6 @@ def delete(repo_id: str) -> int:
         strategy = info.delete_revisions(*revisions)
         freed = strategy.expected_freed_size
         strategy.execute()
-    with config.edit() as data:
-        data.get("pins", {}).pop(repo_id, None)
-        data.get("released", {}).pop(repo_id, None)
-        data.get("bases", {}).pop(repo_id, None)
-        data["trusted"] = [t for t in data.get("trusted", []) if not t.startswith(f"{repo_id}@")]
+    registry.forget(repo_id)
     refresh_scan_cache(config.models_dir())
     return freed
-
-
-def trust_label(resolved: Resolved) -> str:
-    """How `show` and the model manager describe whether a model runs code from its repo."""
-    if not resolved.family.runs_repo_code:
-        return "no repo code"
-    if is_trusted(resolved):
-        return "trusted"
-    return "NOT trusted"
-
-
-def is_trusted(resolved: Resolved) -> bool:
-    return not resolved.family.runs_repo_code or f"{resolved.repo_id}@{resolved.revision}" in config.load().get(
-        "trusted", []
-    )
-
-
-def trust(resolved: Resolved) -> None:
-    key = f"{resolved.repo_id}@{resolved.revision}"
-    with config.edit() as data:
-        if key not in data.setdefault("trusted", []):
-            data["trusted"].append(key)

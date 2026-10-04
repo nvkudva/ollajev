@@ -14,7 +14,7 @@ from typing import Any
 
 import psutil
 
-from . import config, names, store
+from . import config, names, registry, store
 from .adapters import pick_device
 from .adapters.base import Adapter
 
@@ -136,7 +136,7 @@ class Manager:
         return slot
 
     def _load(self, key: str, resolved: store.Resolved) -> Slot:
-        if not store.is_trusted(resolved):
+        if not registry.is_trusted(resolved):
             raise NotTrusted(
                 f"{key} runs Python code from its repo at {resolved.revision[:12]}; review it, then run: "
                 f"ollajev pull {key} --trust"

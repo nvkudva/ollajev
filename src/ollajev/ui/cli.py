@@ -19,7 +19,7 @@ from importlib.metadata import version
 
 import httpx
 
-from .. import client, config, store
+from .. import client, config, registry, store
 from ..manager import canonical, canonical_or, default_model, lookup
 
 # ---- model management -----------------------------------------------------------------------------
@@ -27,7 +27,7 @@ from ..manager import canonical, canonical_or, default_model, lookup
 
 def confirm_trust(resolved: store.Resolved, assume_yes: bool) -> None:
     """Families that import Python from the model repo run it with your privileges. Ask once per commit."""
-    if store.is_trusted(resolved):
+    if registry.is_trusted(resolved):
         return
     code = sorted(f for f in resolved.files if f.endswith(".py"))
     print(f"\n{canonical(resolved)} runs Python code from its Hugging Face repo, with your user's privileges.")
@@ -40,7 +40,7 @@ def confirm_trust(resolved: store.Resolved, assume_yes: bool) -> None:
             raise SystemExit("not trusted; review the code, then pull again with --trust")
         if input("\nTrust this exact commit? Type 'yes': ").strip() != "yes":
             raise SystemExit("not trusted; nothing downloaded")
-    store.trust(resolved)
+    registry.trust(resolved)
 
 
 def pull(name: str, trust: bool = False) -> store.Resolved:
@@ -87,8 +87,8 @@ def cmd_show(args: argparse.Namespace) -> None:
     print(f"  revision     {resolved.revision}")
     if resolved.weights:
         print(f"  file         {resolved.weights}")
-    print(f"  released     {store.released(resolved.repo_id) or '-'}")
-    print(f"  repo code    {store.trust_label(resolved)}")
+    print(f"  released     {registry.released(resolved.repo_id) or '-'}")
+    print(f"  repo code    {registry.trust_label(resolved)}")
     for key, value in resolved.family.limits(resolved).items():
         print(f"  {key:<12} {value}")
     print(f"  path         {store.local_path(resolved)}")
@@ -201,7 +201,7 @@ def preload_name(model: str) -> str | None:
         print(f"==> {model} is not downloaded; serving without a model. Pull one with: ollajev pull {model}")
         return None
     name = canonical(resolved)
-    if not store.is_trusted(resolved):
+    if not registry.is_trusted(resolved):
         print(f"==> {name} runs repo code and is not trusted yet; run: ollajev pull {name}")
         return None
     return name
