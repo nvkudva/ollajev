@@ -8,6 +8,7 @@ import functools
 import logging
 import os
 import re
+import shlex
 import subprocess
 import sys
 import threading
@@ -22,12 +23,12 @@ from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
-from textual.widgets import Button, DataTable, Static
+from textual.widgets import Button, DataTable, ProgressBar, Static
 
-from .. import client, config, names, service, store
+from .. import client, config, names, registry, service, store
 from ..catalog import CATALOG
+from ..library import tags
 from ..manager import canonical, canonical_or, default_model, lookup
-from ..server import admin
 from . import dialogs, repl
 
 try:
@@ -39,9 +40,10 @@ log = logging.getLogger(__name__)
 
 CSS = """
 Screen { background: $background; }
-#brand { height: 1; padding: 0 1; background: $panel; }
-#brand-name { width: auto; text-style: bold; color: $accent; margin-right: 3; }
-#brand Button.menu { width: auto; min-width: 0; padding: 0 1; margin-right: 1; background: transparent; border: none; }
+#brand { height: 1; margin: 0 1; padding: 0 1; background: $panel; }
+#brand-name { width: auto; text-style: bold; color: $accent; margin-right: 2; }
+#brand-gap { width: 1fr; }
+#brand Button.menu { width: auto; min-width: 0; padding: 0 1; background: transparent; border: none; }
 #brand Button.menu:hover { color: $accent; background: transparent; }
 #brand Button.menu:focus { background: transparent; text-style: none; }
 #models-panel {
@@ -53,9 +55,21 @@ DataTable > .datatable--header { background: $surface; color: $text-muted; text-
 DataTable > .datatable--cursor { background: $primary 30%; text-style: bold; }
 DataTable > .datatable--hover { background: $boost; }
 #empty { height: 1fr; content-align: center middle; color: $text-muted; background: $surface; display: none; }
-#status { height: 1; padding: 0 2; color: $text-muted; }
-#status.error { color: $error; text-align: left; }
-#status.busy { color: $text; text-align: left; }
+#job-bar { height: auto; margin: 0 1; padding: 0 1; background: $surface; display: none; }
+#job-bar.show { display: block; }
+#progress { height: 1; margin: 0 1; }
+#status { height: 1; margin: 0 1; padding: 0 1; background: $panel; color: $text-muted; }
+#status.error { color: $error; }
+#status.busy { color: $warning; }
+#status.ok { color: $success; }
+#selection-panel {
+    height: auto; margin: 0 1; padding: 0 1; background: $surface; border: round $primary 60%;
+    border-title-color: $text; border-title-style: bold;
+}
+#selection-panel.loaded { border: round $success 60%; }
+#selection-row { height: auto; }
+#selection-info { width: 1fr; height: 2; text-wrap: nowrap; text-overflow: ellipsis; }
+#selection-panel .buttons { width: auto; margin-top: 0; }
 #server-panel {
     height: auto; margin: 0 1; padding: 0 1; background: $surface; border: round $success 60%;
     border-title-color: $text; border-title-style: bold; display: none;
@@ -71,9 +85,6 @@ ModalScreen { align: center middle; background: $background 60%; }
     border: round $primary; border-title-align: left; border-title-style: bold; border-title-color: $text;
 }
 .dialog.danger { border: round $error; }
-.close-row { height: 1; align-horizontal: right; margin-bottom: 1; }
-.dialog Button.close { width: 3; min-width: 0; padding: 0; background: transparent; border: none; color: $text-muted; }
-.dialog Button.close:hover { color: $error; background: transparent; }
 .hint { color: $text-muted; margin-top: 1; }
 .dialog Input, .dialog Select { margin-bottom: 1; }
 .field { height: auto; margin-bottom: 1; }
@@ -81,19 +92,21 @@ ModalScreen { align: center middle; background: $background 60%; }
 .field Input, .field Select { width: 1fr; margin-bottom: 0; }
 .dialog TextArea { height: 6; margin-bottom: 1; }
 .buttons { height: auto; margin-top: 1; align-horizontal: right; }
-.buttons Button { width: 13; min-width: 0; padding: 0 1; margin-left: 1; background: transparent; border: none; }
+.buttons Button { width: auto; min-width: 0; padding: 0 1; margin-left: 1; background: transparent; border: none; }
 .buttons Button:hover { color: $accent; background: transparent; }
-.buttons Button:focus { text-style: bold underline; background: transparent; }
+.buttons Button:focus { text-style: bold; background: transparent; }
 .buttons Button.-primary { color: $accent; text-style: bold; }
 .buttons Button.-error { color: $error; text-style: bold; }
+.buttons Button.-success { color: $success; text-style: bold; }
 .buttons .hint { width: 1fr; margin-top: 0; }
-#answers-box { height: auto; max-height: 14; }
+#answers-box { height: auto; max-height: 14; border: round $primary 40%; padding: 0 1; }
+#answers { color: $text; }
+#ask-hint { color: $text-muted; }
+#note { color: $text-muted; }
 .wide { width: 112; }
 #results { height: 20; }
 """
 
-ROW_BUTTON_WIDTH = 10  # every button in the list is this wide, so they line up in columns
-ROW_BUTTON_GAP = "   "
 LANGUAGE_SHORT = {"English": "en", "Multilingual": "multi", "100+ languages": "100+"}
 
 
@@ -151,6 +164,37 @@ def system_theme() -> str:
     return "textual-dark"
 
 
+def open_terminal(command: list[str]) -> bool:
+    """Run `command` in a new tab of the terminal this app runs in: a tmux window, a WezTerm or iTerm2 tab, else
+    a Terminal window on macOS. False when there is no known way, so the caller can say what to run instead."""
+    line = shlex.join(command)
+    program = os.environ.get("TERM_PROGRAM", "")
+    if os.environ.get("TMUX"):
+        launch = ["tmux", "new-window", line]
+    elif program == "WezTerm":
+        launch = ["wezterm", "cli", "spawn", "--", *command]
+    elif sys.platform == "darwin":
+        quoted = line.replace("\\", "\\\\").replace('"', '\\"')
+        if program == "iTerm.app":
+            script = f'tell application "iTerm2" to tell current window to create tab with default profile command "{quoted}"'
+        else:
+            script = f'tell application "Terminal"\nactivate\ndo script "{quoted}"\nend tell'
+        launch = ["osascript", "-e", script]
+    else:
+        return False
+    try:
+        subprocess.Popen(  # noqa: S603 a fixed launcher with our own command
+            launch,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except OSError:
+        return False
+    return True
+
+
 def hugging_face_page(repo_id: str) -> str:
     return f"https://huggingface.co/{repo_id}"
 
@@ -169,28 +213,46 @@ class Row(NamedTuple):
     size: str
     estimated: bool  # the size is the catalog's or Hugging Face's figure, not the files on disk
     downloads: str  # Hugging Face download count, empty until it is read or when it cannot be
-    adapter: str  # the family that answers for it, empty until it is read
     runtime: str  # what runs the weights: llama.cpp, ONNX or PyTorch
     languages: str  # the catalog's languages, empty for a model outside the catalog
 
 
-# The menu bar at the top: (key, label, action). Every key works from the keyboard too; ? lists them all.
+# App actions on the top bar as (key, label, action): these on the left, MENU_END on the right.
+# Actions on one model live in the Selected panel, on the server in the Server panel.
 MENU = [
     ("n", "+ Add", "add"),
-    ("d", "★ Default", "set_default"),
     ("/", "▽ Filter", "filter"),
-    ("o", "⚙ Settings", "options"),
-    ("?", "? Help", "help"),
-    ("q", "← Quit", "quit_app"),
 ]
+MENU_END = [
+    ("o", "⚙ Settings", "options"),
+    ("?", "⊞ Keys", "help"),
+    ("q", "⏻ Quit", "quit_app"),
+]
+
+
+# The Selected panel's buttons: (label, action, variant). Each shows only when it applies to the cursor row.
+SELECTION_BUTTONS = [
+    ("↓ Download", "pull", "primary", "p"),
+    ("▶ Serve", "serve_model", "success", "s"),
+    ("★ Default", "set_default", "default", "d"),
+    ("⏏ Unload", "unload", "default", "u"),
+    ("✕ Delete", "remove", "error", "x"),
+    ("ⓘ Info", "info", "default", "i"),
+]
+SERVER_BUTTONS = [
+    ("🌐 Demo", "open_demo", "primary", "w"),
+    ("≡ Logs", "logs", "default", "l"),
+    ("↻ Restart", "restart_server", "default", "R"),
+    ("■ Stop", "stop_server", "error", "S"),
+]
+DESCRIPTIONS = {entry.name.partition(":")[0]: entry.description for entry in reversed(CATALOG)}
 
 
 class Models(App[bool]):
     TITLE = "ollajev"
     CSS = CSS
-    # The footer shows the keys the row links do not cover; ? lists them all.
+    # The status row shows the keys for the cursor row; ? lists them all.
     BINDINGS: ClassVar = [
-        Binding("r", "ask", "Ask"),
         Binding("d", "set_default", "Default"),
         Binding("i", "info", "Info"),
         Binding("n", "add", "Add"),
@@ -199,12 +261,15 @@ class Models(App[bool]):
         Binding("q", "quit_app", "Quit"),
         Binding("p", "pull", "Pull", show=False),
         Binding("x", "remove", "Remove", show=False),
-        Binding("s", "serve", "Serve", show=False),
+        Binding("s", "serve_model", "Serve", show=False),
+        Binding("R", "restart_server", "Restart", show=False),
+        Binding("S", "stop_server", "Stop", show=False),
         Binding("u", "unload", "Unload", show=False),
         Binding("a", "alias", "Alias", show=False),
         Binding("o", "options", "Options", show=False),
         Binding("b", "service", "Service", show=False),
-        Binding("w", "open_demo", "Web Demo", show=False),
+        Binding("w", "open_demo", "Demo", show=False),
+        Binding("l", "logs", "Logs", show=False),
         Binding("ctrl+r", "reload_list", "Refresh", show=False),
         Binding("e", "last_error", "Error", show=False),
         Binding("escape", "cancel_job", "Cancel", show=False),
@@ -213,7 +278,7 @@ class Models(App[bool]):
     def __init__(self) -> None:
         super().__init__()
         self.names: list[str] = []
-        self.sizes: dict[str, str] = {}  # model name -> the size shown in its row
+        self.rows: dict[str, Row] = {}  # model name -> its row as listed
         self.summary = ""  # the idle status line: disk use and filter
         self.filter_text = ""  # `/` shows only the models whose name contains it
         self.fetching_quants = False
@@ -227,7 +292,7 @@ class Models(App[bool]):
         self.load_lock = threading.Lock()
         self.quants: dict[str, list[store.Variant]] = {}  # catalog GGUF repo -> all its quants on Hugging Face
         self.totals: dict[str, int] = {}  # repo -> its download count on Hugging Face
-        self.adapters: dict[str, str] = {}  # repo -> the family that runs it, for repos outside the download
+
         self.server: subprocess.Popen[bytes] | None = None  # a server this window started, if any
         self.server_model: str | None = None  # what that server was started with
         self.snapshot_cache: tuple[dict[str, Any], str, bool, set[str]] | None = None  # to redraw on a theme change
@@ -237,24 +302,34 @@ class Models(App[bool]):
     def compose(self) -> ComposeResult:
         with Horizontal(id="brand"):
             yield Static("🦒 ollajev", id="brand-name")
-            for key, label, action in MENU:
-                item = Button(f"{label} ([b $accent]{key}[/])", id=f"do-{action}", compact=True, classes="menu")
-                item.can_focus = False  # the list keeps the keyboard; the menu is for the mouse and its keys
-                yield item
+            for key, text, action in MENU:
+                yield self.menu_item(key, text, action)
+            yield Static(id="brand-gap")
+            for key, text, action in MENU_END:
+                yield self.menu_item(key, text, action)
         with Vertical(id="models-panel") as panel:
             panel.border_title = "Models"
             yield DataTable(cursor_type="row")
             yield Static("", id="empty")
+        with Horizontal(id="job-bar"):
+            yield ProgressBar(id="progress", total=100, show_eta=False)
+        with Vertical(id="selection-panel") as selection_panel:
+            selection_panel.border_title = "Selected"
+            with Horizontal(id="selection-row"):
+                yield Static("", id="selection-info")
+                yield dialogs.buttons(*SELECTION_BUTTONS)
         with Vertical(id="server-panel") as server_panel:
             server_panel.border_title = "Server"
             with Horizontal(id="server-row"):
                 yield Static("", id="server-info")
-                yield dialogs.buttons(
-                    ("⧉ Web Demo", "open_demo", "primary"),
-                    ("↻ Restart", "restart_server", "default"),
-                    ("■ Stop", "stop_server", "error"),
-                )
+                yield dialogs.buttons(*SERVER_BUTTONS)
         yield Static("", id="status")
+
+    @staticmethod
+    def menu_item(key: str, text: str, action: str) -> Button:
+        item = Button(dialogs.label(text, key), id=f"do-{action}", compact=True, classes="menu")
+        item.can_focus = False  # the list keeps the keyboard; the menu is for the mouse and its keys
+        return item
 
     async def on_button_pressed(self, event: Button.Pressed) -> None:
         """A key button runs its action like the key; then the list takes the keys again."""
@@ -303,30 +378,58 @@ class Models(App[bool]):
 
     @work(group="downloads")
     async def load_downloads(self) -> None:
-        """Fill the Downloads and Adapter columns for each listed repo. Offline, both stay empty."""
+        """Fill the Downloads column for each listed repo. Offline, it stays empty."""
         repos = list(dict.fromkeys(row.partition(":")[0] for row in self.names or [e.name for e in CATALOG]))
         found = await asyncio.gather(*(asyncio.to_thread(store.listing, repo) for repo in repos))
         self.totals = {repo: total for repo, (total, _) in zip(repos, found, strict=True) if total is not None}
-        self.adapters = {repo: family for repo, (_, family) in zip(repos, found, strict=True) if family}
         self.reload()
 
-    def say(self, text: str, kind: str = "busy") -> None:
+    def say(self, text: str | Text, kind: str = "busy") -> None:
+        """Put `text` on the status row: busy in the warning colour, error in red, ok in green, idle muted."""
+        icon = {"busy": "◌ ", "error": "✕ ", "ok": "✓ "}.get(kind, "")
         status = self.query_one("#status", Static)
         status.set_classes(kind)
-        status.update(text)
+        status.update(Text.assemble((icon, "bold"), text))
 
     def say_idle(self) -> None:
-        """The status line between jobs: the last error until a job succeeds, else disk use, filter and quants."""
+        """The status row between jobs: the last error until a job succeeds; else what is going on (a filter,
+        quants being fetched), then the keys for what the cursor row can do."""
         if self.last_error:
             first_line = self.last_error.splitlines()[0]
-            self.say(f"! {first_line}  ·  e for details", "error")
+            self.say(Text.assemble(first_line, ("  ·  ", "dim"), self.key_hints([("e", "for details")])), "error")
             return
-        parts = []
+        line = Text()
         if self.fetching_quants:
-            parts.append("fetching quants…")
+            line.append("fetching quants …  ", style=self.colour("warning"))
         if self.filter_text:
-            parts.append(f"filter '{self.filter_text}' · esc clears")
-        self.say("  ·  ".join(parts) or "Pick a model with the mouse or the arrow keys.", "idle")
+            line.append(f"▽ '{self.filter_text}'  ", style=f"bold {self.colour('accent')}")
+        line.append_text(self.key_hints(self.selection_keys()))
+        self.say(line, "idle")
+
+    def selection_keys(self) -> list[tuple[str, str]]:
+        """(key, what it does) for the cursor row, in the order a user tends to need them."""
+        keys = [("↑↓", "pick")]
+        name = self.selected()
+        if name and self.snapshot_cache:
+            have, default, _, loaded = self.snapshot_cache
+            if name not in have:
+                keys += [("enter", "download & use"), ("p", "download only")]
+            else:
+                if name != default:
+                    keys += [("enter", "make default")]
+                keys += [("s", "serve")]
+                if name in loaded:
+                    keys += [("u", "unload")]
+                keys += [("a", "short name"), ("x", "delete")]
+            keys += [("i", "info")]
+        if self.filter_text:
+            keys += [("esc", "clear filter")]
+        return [*keys, ("?", "all keys")]
+
+    def key_hints(self, keys: list[tuple[str, str]]) -> Text:
+        """Keys in bold accent, what they do muted, spaced apart."""
+        accent = self.colour("accent")
+        return Text("   ").join(Text.assemble((key, f"bold {accent}"), " ", (what, "dim")) for key, what in keys)
 
     def action_help(self) -> None:
         self.push_screen(dialogs.Info("Keys", keys_help(self.colour("accent"))))
@@ -347,7 +450,7 @@ class Models(App[bool]):
 
     def snapshot(self) -> tuple[dict[str, Any], str, bool, set[str]]:
         """What the list shows: downloads, default, server up, loaded models. Slow: disk scan and server probes."""
-        have = {m["name"]: m for m in admin.tags()}
+        have = {m["name"]: m for m in tags()}
         default = canonical_or(default_model())
         server_up = client.server_running()  # each probe can wait 0.5 s, so probe once per reload
         return have, default, server_up, self.loaded(server_up)
@@ -363,6 +466,19 @@ class Models(App[bool]):
         data = self.snapshot()
         self.call_from_thread(self.render_list, *data)
 
+    def visible_columns(self) -> list[str]:
+        """Column keys shown at the current width. Narrow terminals keep Status, Model and Size;
+        Downloads/Runtime/Lang return as the window widens (progressive disclosure)."""
+        try:
+            width = self.size.width or 160
+        except Exception:
+            width = 160
+        if width < 90:
+            return ["state", "model", "size"]
+        if width < 110:
+            return ["state", "model", "size", "downloads"]
+        return ["state", "model", "size", "downloads", "runtime", "lang"]
+
     def render_list(self, have: dict[str, Any], default: str, server_up: bool, loaded: set[str]) -> None:
         self.snapshot_cache = (have, default, server_up, loaded)
         rows = self.list_rows(have)
@@ -371,47 +487,89 @@ class Models(App[bool]):
         table = self.query_one(DataTable)
         keep = self.selected()
         table.clear(columns=True)
+        visible = self.visible_columns()
         model_width = min(50, max([len(row.label) for row in rows] + [12]))
-        table.add_column("Status", width=12, key="state")
-        table.add_column("Model", width=model_width, key="model")
-        table.add_column(Text("Size", justify="right"), width=8, key="size")
-        table.add_column(Text("Downloads", justify="right"), width=10, key="downloads")
-        table.add_column("Adapter", width=16, key="adapter")
-        table.add_column("Runtime", width=10, key="runtime")
-        table.add_column("Lang", width=6, key="lang")
-        table.add_column("Actions", key="actions")
-        self.names, self.sizes = [], {}
+        if "state" in visible:
+            table.add_column("Status", width=13, key="state")
+        if "model" in visible:
+            table.add_column("Model", width=model_width, key="model")
+        if "size" in visible:
+            table.add_column(Text("Size", justify="right"), width=9, key="size")
+        if "downloads" in visible:
+            table.add_column(Text("Downloads", justify="right"), width=10, key="downloads")
+        if "runtime" in visible:
+            table.add_column("Runtime", width=10, key="runtime")
+        if "lang" in visible:
+            table.add_column("Lang", width=6, key="lang")
+        self.names, self.rows = [], {}
         for row in rows:
             on_disk, is_loaded = row.name in have, row.name in loaded
-            self.sizes[row.name] = row.size
-            size = Text(row.size, justify="right", style="dim italic" if row.estimated else "")
-            downloads = Text(row.downloads, justify="right", style="dim")
-            adapter = Text(row.adapter, style="dim")
-            runtime = Text(row.runtime, style="dim")
-            language = Text(LANGUAGE_SHORT.get(row.languages, row.languages), style="dim")
-            table.add_row(
-                self.state_pills(row.name == default, is_loaded, on_disk),
-                row.label,
-                size,
-                downloads,
-                adapter,
-                runtime,
-                language,
-                self.row_actions(row.name, on_disk, is_loaded),
-                key=row.name,
-            )
+            self.rows[row.name] = row
+            cells: dict[str, Any] = {
+                "state": self.state_pills(row.name == default, is_loaded, on_disk),
+                "model": row.label,
+                "size": Text(row.size, justify="right", style="dim italic" if row.estimated else ""),
+                "downloads": Text(row.downloads, justify="right", style="dim"),
+                "runtime": Text(row.runtime, style="dim"),
+                "lang": Text(LANGUAGE_SHORT.get(row.languages, row.languages), style="dim"),
+            }
+            table.add_row(*(cells[key] for key in visible), key=row.name)
             self.names.append(row.name)
         table.display = bool(rows)
         empty = self.query_one("#empty", Static)
         empty.display = not rows
-        empty.update(f"No models match '{self.filter_text}'  ·  / to change it, esc to clear it")
+        if self.filter_text:
+            empty.update(f"No models match '{self.filter_text}'  ·  / to change it, esc to clear it")
+        else:
+            empty.update("No models yet  ·  n adds one from Hugging Face")
         if keep in self.names:
             table.move_cursor(row=self.names.index(keep))
         self.show_server_panel(server_up, loaded)
+        self.show_selection(default, loaded, have)
         self.summary = self.describe(have)
         self.query_one("#models-panel").border_subtitle = self.summary
         if not self.busy:
             self.say_idle()
+
+    def show_selection(self, default: str, loaded: set[str], have: dict[str, Any]) -> None:
+        """The Selected panel: the cursor row's model, its state and facts, and buttons for what applies to it."""
+        name = self.selected()
+        row = self.rows.get(name) if name else None
+        on_disk, is_loaded, is_default = name in have, name in loaded, name == default
+        applies = {
+            "pull": not on_disk,
+            "serve_model": on_disk,
+            "set_default": on_disk and not is_default,
+            "unload": is_loaded,
+            "remove": on_disk,
+            "info": True,
+        }
+        for _, action, _, _ in SELECTION_BUTTONS:
+            self.query_one(f"#do-{action}").display = row is not None and applies[action]
+        self.query_one("#selection-panel").set_class(is_loaded, "loaded")
+        info = Text()
+        if row is None:
+            info.append("No model selected", style="dim")
+        else:
+            repo, _, quant = row.name.partition(":")
+            info.append(repo, style="bold")
+            if quant:
+                info.append(f":{quant}", style="dim")
+            info.append("   ")
+            info.append_text(self.state_pills(is_default, is_loaded, on_disk))
+            size = f"{row.size} on disk" if on_disk else f"~{row.size} to download"
+            downloads = f"{row.downloads} downloads" if row.downloads else ""
+            facts = [size, row.runtime, row.languages, downloads, DESCRIPTIONS.get(repo, "")]
+            info.append("\n" + "  ·  ".join(fact for fact in facts if fact), style="dim")
+        self.query_one("#selection-info", Static).update(info)
+
+    def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
+        """Cursor moved: show the new row in the Selected panel and its keys on the status row."""
+        if self.snapshot_cache:
+            have, default, _, loaded = self.snapshot_cache
+            self.show_selection(default, loaded, have)
+            if not self.busy:
+                self.say_idle()
 
     def state_pills(self, is_default: bool, is_loaded: bool, on_disk: bool) -> Text:
         """★ default and ● loaded in colour; ✓ downloaded or ○ available (not downloaded) dim. A loaded default
@@ -430,34 +588,13 @@ class Models(App[bool]):
             labels.append("○ available", style="dim")
         return labels
 
-    def row_actions(self, name: str, on_disk: bool, is_loaded: bool) -> Text:
-        """Clickable buttons for one row: Download before it is on disk, then Serve and Delete; Info always."""
-
-        def button(label: str, action: str, colour: str, slots: int = 1) -> Text:
-            padded = label.ljust(ROW_BUTTON_WIDTH * slots + len(ROW_BUTTON_GAP) * (slots - 1))
-            return Text.from_markup(f"[bold {colour}][@click=app.on_row({name!r}, {action!r})]{padded}[/][/]")
-
-        if on_disk:
-            row = [
-                button("▶ Serve", "serve_model", self.colour("success")),
-                button("✕ Delete", "remove", self.colour("error")),
-            ]
-        else:
-            # Two slots wide, where Serve and Delete sit on a downloaded row, so Info lines up below Info.
-            row = [button("↓ Download", "pull", self.colour("accent"), slots=2)]
-        row.append(button("ⓘ Info", "info", self.colour("foreground")))
-        return Text(ROW_BUTTON_GAP).join(row)
-
-    async def action_on_row(self, name: str, action: str) -> None:
-        """A click on a row's action link: select that row, then run the action as its key would."""
-        if name in self.names:
-            self.query_one(DataTable).move_cursor(row=self.names.index(name))
-        await self.run_action(action)
-
     def action_serve_model(self) -> None:
         """Serve the selected model: it becomes the default and the server starts (or restarts) with it."""
         name = self.selected()
         if not name or self.refuse_while_busy():
+            return
+        if not self.downloaded(name):
+            self.notify("Download it first (p or Enter)", severity="warning")
             return
         config.update(default_model=canonical_or(name))
         self.action_serve()
@@ -479,7 +616,6 @@ class Models(App[bool]):
                     size,
                     estimated,
                     self.count_of(entry.name),
-                    self.adapter_of(entry.name, have),
                     self.runtime_of(entry.name, have),
                     entry.languages,
                 )
@@ -500,7 +636,6 @@ class Models(App[bool]):
                         size,
                         estimated,
                         self.count_of(variant.name),
-                        self.adapter_of(variant.name, have),
                         self.runtime_of(variant.name, have),
                         entry.languages,
                     )
@@ -515,19 +650,11 @@ class Models(App[bool]):
                         dialogs.human(model["size"]),
                         False,
                         self.count_of(name),
-                        model["details"]["family"],
                         self.runtime_of(name, have),
                         "",
                     )
                 )
         return rows
-
-    def adapter_of(self, name: str, have: dict[str, Any]) -> str:
-        """The Adapter cell: the family that answers for the model. A download knows it; a listed one is read
-        from Hugging Face, and the cell stays empty until that arrives."""
-        if name in have:
-            return have[name]["details"]["family"]
-        return self.adapters.get(name.partition(":")[0], "")
 
     def runtime_of(self, name: str, have: dict[str, Any]) -> str:
         """The Runtime cell: what runs the weights. A downloaded one has the format of the file its family loads
@@ -565,7 +692,10 @@ class Models(App[bool]):
 
     def selected(self) -> str | None:
         table = self.query_one(DataTable)
-        return self.names[table.cursor_row] if self.names else None
+        if not self.names:
+            return None
+        row = min(max(table.cursor_row, 0), len(self.names) - 1)
+        return self.names[row]
 
     def downloaded(self, name: str) -> bool:
         try:
@@ -641,7 +771,7 @@ class Models(App[bool]):
 
     async def fetch(self, name: str) -> store.Resolved | None:
         resolved = await asyncio.to_thread(lambda: store.resolve(lookup(name)))
-        if resolved.family.runs_repo_code and not store.is_trusted(resolved):
+        if resolved.family.runs_repo_code and not registry.is_trusted(resolved):
             code = sorted(f for f in resolved.files if f.endswith(".py"))
             body = (
                 f"{canonical(resolved)} runs Python code from its Hugging Face repo, with your user's privileges.\n\n"
@@ -651,7 +781,7 @@ class Models(App[bool]):
             if not await self.push_screen_wait(dialogs.Confirm("This model runs repo code", body)):
                 self.notify("Not trusted; nothing downloaded", severity="warning")
                 return None
-            store.trust(resolved)
+            registry.trust(resolved)
         self.downloading = True
         progress = await self.show_progress(resolved)
         try:
@@ -665,7 +795,8 @@ class Models(App[bool]):
         return resolved
 
     async def show_progress(self, resolved: store.Resolved) -> Any:
-        """Put the download's bytes, percent and speed on the status line every half second; returns the timer."""
+        """Put the download's bytes, percent and speed on the status line and a bar under the list
+        every half second; returns the timer (stopping it also hides the bar)."""
         name = canonical(resolved)
         try:
             total = await asyncio.to_thread(store.download_size, resolved)
@@ -673,6 +804,13 @@ class Models(App[bool]):
             total = 0
         start = store.bytes_on_disk(resolved.repo_id)
         started = time.monotonic()
+        try:
+            bar = self.query_one("#progress", ProgressBar)
+            job_bar = self.query_one("#job-bar")
+            bar.update(total=total or 100, progress=0)
+            job_bar.add_class("show")
+        except Exception:
+            bar, job_bar = None, None  # type: ignore[assignment]
 
         def update() -> None:
             done = store.bytes_on_disk(resolved.repo_id) - start
@@ -683,9 +821,25 @@ class Models(App[bool]):
             else:
                 amount = dialogs.human(done)
             self.say(f"Downloading {name}: {amount} · {dialogs.human(speed)}/s · esc cancels")
+            if bar is not None:
+                with contextlib.suppress(Exception):
+                    bar.update(total=total or 100, progress=min(done, total or done))
+
+        def hide() -> None:
+            if job_bar is not None:
+                with contextlib.suppress(Exception):
+                    job_bar.remove_class("show")
 
         update()
-        return self.set_interval(0.5, update)
+        timer = self.set_interval(0.5, update)
+        stop = timer.stop
+
+        def stop_and_hide() -> None:
+            stop()
+            hide()
+
+        timer.stop = stop_and_hide  # type: ignore[method-assign]
+        return timer
 
     # ---- actions ----------------------------------------------------------------------------------
 
@@ -696,7 +850,7 @@ class Models(App[bool]):
         if not name:
             return
         if not self.downloaded(name):
-            size = self.sizes.get(name, "an unknown size")
+            size = self.rows[name].size if name in self.rows else "an unknown size"
             question = dialogs.Confirm(
                 f"Download {name}?", f"It is {size}. It becomes the default model.", default=True
             )
@@ -838,7 +992,7 @@ class Models(App[bool]):
                 )
             )
             return
-        trusted = store.trust_label(resolved)
+        trusted = registry.trust_label(resolved)
         limits = ", ".join(f"{k} {v}" for k, v in resolved.family.limits(resolved).items()) or "none recorded"
         body = (
             f"family   {resolved.family.name}\ncommit   {resolved.revision}\nfile     {resolved.weights or 'safetensors'}\n"
@@ -923,12 +1077,21 @@ class Models(App[bool]):
             self.stop_server()
         elif client.server_running():
             self.notify("This server was started outside this window; stop it there (or: ollajev service)")
+        else:
+            self.notify("No server is running")
 
     def action_restart_server(self) -> None:
         if self.server_alive() or self.server is not None:
             self.stop_server(then_start=self.server_model or canonical_or(default_model()))
         else:
             self.notify("No server from this window to restart", severity="warning")
+
+    def action_logs(self) -> None:
+        """Follow the server's log and console output in a new terminal tab, or say what to run when it cannot."""
+        log_dir = config.log_dir()
+        command = ["tail", "-F", str(log_dir / "server.log"), str(log_dir / "server-console.log")]
+        if not open_terminal(command):
+            self.notify(f"Run in another terminal: {shlex.join(command)}", timeout=15)
 
     def action_open_demo(self) -> None:
         """Open the demo page of the running server in the browser."""
@@ -961,8 +1124,13 @@ class Models(App[bool]):
             info.append("● running", style=f"bold {self.colour('success')}")
             info.append(f"   {url}", style="bold")
             info.append("" if ours else "   started outside this window", style="dim")
-            serving = ", ".join(sorted(loaded)) or "no model loaded yet"
-            info.append(f"\nmodel {serving}  ·  log {log_file}", style="dim")
+            serving = ", ".join(sorted(loaded))
+            info.append("\nmodel ", style="dim")
+            if serving:
+                info.append(serving, style=f"bold {self.colour('success')}")
+            else:
+                info.append("no model loaded yet", style="dim")
+            info.append(f"  ·  log {log_file}", style="dim")
         self.query_one("#server-info", Static).update(info)
 
     @work
@@ -991,13 +1159,12 @@ KEYS: list[tuple[str, list[tuple[str, str, str]]]] = [
     (
         "Models",
         [
-            ("enter", "download if needed, make it the default", "pull"),
+            ("enter", "download if needed, then make it the default", "pull"),
+            ("p", "download only, keep the current default", "pull"),
             ("d", "make a downloaded model the default", ""),
-            ("p", "download only", "pull"),
-            ("r", "ask the model questions", "run"),
             ("i", "family, commit, limits, path", "show"),
             ("u", "unload it from memory", "stop"),
-            ("x", "delete the download", "rm"),
+            ("x", "delete the download from disk", "rm"),
             ("a", "give it a short name", "cp"),
             ("n", "add any Hugging Face repo by name", "pull"),
         ],
@@ -1005,8 +1172,11 @@ KEYS: list[tuple[str, list[tuple[str, str, str]]]] = [
     (
         "Server",
         [
-            ("s", "start the server here, or restart it", "serve"),
+            ("s", "serve the selected model: it becomes the default, the server starts or restarts", "serve"),
+            ("R", "restart the server", ""),
+            ("S", "stop the server", ""),
             ("w", "open the demo page in the browser", ""),
+            ("l", "follow the server logs in a new terminal tab", ""),
             ("o", "settings: device, address, port, memory", ""),
             ("b", "install or remove the background service", "service"),
         ],
@@ -1014,12 +1184,12 @@ KEYS: list[tuple[str, list[tuple[str, str, str]]]] = [
     (
         "App",
         [
-            ("/", "filter the list by name; esc clears it", ""),
+            ("/", "filter the list by name; esc clears the filter", ""),
             ("ctrl+r", "refresh the list", ""),
             ("e", "the last error in full", ""),
-            ("esc", "cancel a download", ""),
+            ("esc", "cancel a running download first, else clear the filter", ""),
             ("ctrl+p", "pick a colour theme", ""),
-            ("q", "quit", ""),
+            ("q", "quit (asks first when busy)", ""),
         ],
     ),
 ]

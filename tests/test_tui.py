@@ -18,6 +18,9 @@ def app(tmp_path, monkeypatch):
     monkeypatch.setenv("OLLAJEV_MODELS", str(tmp_path / "models"))
     monkeypatch.setattr(client, "server_running", lambda: False)
     monkeypatch.setattr(tui.dialogs, "variants", lambda repo: [])  # offline: the catalog's quants are not listed
+    # Offline: download counts never reach Hugging Face, so slow lookups cannot starve the shared
+    # thread pool that the dialogs under test also use.
+    monkeypatch.setattr(tui.store, "listing", lambda repo: (None, None))
     return tui.Models()
 
 
@@ -59,6 +62,7 @@ class FakeServer:
 def test_serve_starts_the_server_inside_the_manager(app, monkeypatch):
     monkeypatch.setattr(tui, "system_theme", lambda: "textual-dark")  # it runs a subprocess on macOS
     monkeypatch.setattr(tui.subprocess, "Popen", FakeServer)
+    monkeypatch.setattr(tui.Models, "downloaded", lambda self, name: True)  # s serves the selected model
     FakeServer.started = []
 
     async def go():
@@ -82,6 +86,7 @@ def test_serve_starts_the_server_inside_the_manager(app, monkeypatch):
 def test_quit_asks_before_stopping_a_running_server(app, monkeypatch):
     monkeypatch.setattr(tui, "system_theme", lambda: "textual-dark")  # it runs a subprocess on macOS
     monkeypatch.setattr(tui.subprocess, "Popen", FakeServer)
+    monkeypatch.setattr(tui.Models, "downloaded", lambda self, name: True)
 
     async def go():
         async with app.run_test(size=(160, 40)) as pilot:
@@ -127,13 +132,21 @@ def test_add_model_lists_every_quant_and_returns_the_picked_one(app, monkeypatch
             app.push_screen(tui.dialogs.AddModel(), picked.append)
             await pilot.pause()
             await pilot.press(*"ok", "enter")
-            await pilot.pause(0.5)
             results = app.screen.query_one("#results", DataTable)
+            for _ in range(100):
+                if results.row_count:
+                    break
+                await pilot.pause(0.1)
             rows = [results.get_row_at(i) for i in range(results.row_count)]
-            assert rows[0] == ["u/ok-GGUF:Q4_K_M", "2.7 GB", "1.2k", "✓ decider", "llama.cpp"]
-            # No family runs u/no-GGUF, so its quant stays unpickable and has no runtime to name.
-            assert rows[2] == ["u/no-GGUF:Q4_K_M", "2.7 GB", "5", "✗ unsupported", ""]
-            assert [r[0] for r in rows] == ["u/ok-GGUF:Q4_K_M", "u/ok-GGUF:Q8_0", "u/no-GGUF:Q4_K_M", "u/no-GGUF:Q8_0"]
+            assert rows[0] == ["u/ok-GGUF:Q4_K_M", "2.7 GB", "1.2k", "llama.cpp"]
+            # No family runs u/no-GGUF, so its quant stays marked, unpickable and with no runtime to name.
+            assert rows[2] == ["✗ u/no-GGUF:Q4_K_M", "2.7 GB", "5", ""]
+            assert [r[0] for r in rows] == [
+                "u/ok-GGUF:Q4_K_M",
+                "u/ok-GGUF:Q8_0",
+                "✗ u/no-GGUF:Q4_K_M",
+                "✗ u/no-GGUF:Q8_0",
+            ]
             await pilot.press("down", "enter")
             await pilot.pause()
 
@@ -348,14 +361,40 @@ def test_options_accepts_only_host_names_and_addresses(host, valid):
     assert tui.dialogs.valid_host(host) is valid
 
 
-def test_every_row_has_its_buttons(app):
-    async def go():
-        async with app.run_test(size=(160, 36)):
-            table = app.query_one(DataTable)
-            cells = [table.get_cell(name, "actions").plain for name in app.names[:3]]
-            return [[word for word in cell.split() if word.isalpha()] for cell in cells]
+def shown_buttons(app):
+    panel = app.query_one("#selection-panel")
+    return [str(button.label).split()[2] for button in panel.query("Button") if button.display]
 
-    assert asyncio.run(go()) == [["Download", "Info"]] * 3
+
+def test_the_selected_panel_has_the_cursor_rows_buttons(app):
+    async def go():
+        async with app.run_test(size=(160, 36)) as pilot:
+            table = app.query_one(DataTable)
+            out = []
+            for row in range(2):
+                table.move_cursor(row=row)
+                await pilot.pause()
+                out.append((shown_buttons(app), app.query_one("#selection-info").render().plain.split()[0]))
+            return out
+
+    first, second = asyncio.run(go())
+    assert first == (["Download", "Info"], CATALOG[0].name)
+    assert second[0] == ["Download", "Info"]
+
+
+def test_the_selected_panel_offers_what_a_downloaded_model_can_do(app):
+    async def go():
+        async with app.run_test(size=(160, 36)) as pilot:
+            await pilot.pause()
+            name = app.selected()
+            app.show_selection("other", set(), {name: {}})
+            not_default = shown_buttons(app)
+            app.show_selection(name, {name}, {name: {}})
+            return not_default, shown_buttons(app), "loaded" in app.query_one("#selection-panel").classes
+
+    not_default, loaded_default, bordered = asyncio.run(go())
+    assert not_default == ["Serve", "Default", "Delete", "Info"]
+    assert loaded_default == ["Serve", "Unload", "Delete", "Info"] and bordered
 
 
 def test_confirm_buttons_answer_it():
@@ -376,25 +415,17 @@ def test_confirm_buttons_answer_it():
     assert asyncio.run(go("#do-no")) == [False]
 
 
-def test_row_action_links_select_their_row_and_act(app):
+def test_selected_panel_buttons_act_on_the_cursor_row(app):
     async def go():
         async with app.run_test(size=(160, 36)) as pilot:
-            target = app.names[3]
-            await app.run_action(f"on_row({target!r}, 'info')")
+            app.query_one(DataTable).move_cursor(row=3)
             await pilot.pause()
-            return target, app.selected(), type(app.screen).__name__
+            await pilot.click("#do-info")
+            await pilot.pause()
+            return app.selected(), str(app.screen.query_one(".dialog").border_title)
 
-    target, selected, screen = asyncio.run(go())
-    assert selected == target and screen == "Info"
-
-
-def test_row_actions_offer_download_until_on_disk(app):
-    def labels(text):
-        return [word for word in text.plain.split() if word.isalpha()]
-
-    assert labels(app.row_actions("a/b", on_disk=False, is_loaded=False)) == ["Download", "Info"]
-    assert labels(app.row_actions("a/b", on_disk=True, is_loaded=True)) == ["Serve", "Delete", "Info"]
-    assert labels(app.row_actions("a/b", on_disk=True, is_loaded=False)) == ["Serve", "Delete", "Info"]
+    selected, title = asyncio.run(go())
+    assert title == selected
 
 
 @pytest.mark.parametrize(
@@ -418,31 +449,6 @@ def test_theme_follows_the_background_the_terminal_reports(monkeypatch, backgrou
     tui.system_theme.cache_clear()
 
 
-@pytest.mark.parametrize(
-    ("dialog", "button", "answer"),
-    [
-        (lambda: tui.dialogs.Info("t", "b"), "#close-close", None),
-        (lambda: tui.dialogs.Confirm("t", "b", default=True), "#close-no", False),
-        (lambda: tui.dialogs.Prompt("t"), "#close-cancel", None),
-    ],
-)
-def test_the_corner_cross_closes_every_dialog(dialog, button, answer):
-    async def go():
-        answers = []
-
-        class Host(tui.App):
-            def on_mount(self):
-                self.push_screen(dialog(), answers.append)
-
-        async with Host().run_test(size=(100, 30)) as pilot:
-            await pilot.pause()
-            await pilot.click(button)
-            await pilot.pause()
-        return answers
-
-    assert asyncio.run(go()) == [answer]
-
-
 def test_info_links_to_the_model_on_hugging_face(app, monkeypatch):
     opened = []
     monkeypatch.setattr(tui.dialogs.webbrowser, "open", opened.append)
@@ -456,3 +462,110 @@ def test_info_links_to_the_model_on_hugging_face(app, monkeypatch):
 
     asyncio.run(go())
     assert opened == [f"https://huggingface.co/{CATALOG[0].name.partition(':')[0]}"]
+
+
+def test_status_kinds_set_their_style_class(app):
+    from textual.widgets import Static
+
+    async def go():
+        async with app.run_test(size=(160, 36)) as pilot:
+            await pilot.pause()
+            status = app.query_one("#status", Static)
+            app.say("working", "busy")
+            busy = set(status.classes)
+            app.say("failed", "error")
+            return busy, set(status.classes)
+
+    busy, error = asyncio.run(go())
+    assert "busy" in busy and "error" in error
+
+
+def test_status_row_lists_the_keys_for_the_cursor_row(app):
+    async def go():
+        async with app.run_test(size=(160, 36)) as pilot:
+            await pilot.pause()
+            return app.query_one("#status").render().plain
+
+    hint = asyncio.run(go())
+    assert "enter download & use" in hint and "? all keys" in hint and "x delete" not in hint
+
+
+def test_narrow_terminals_keep_only_the_essential_columns(app):
+    async def go():
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            table = app.query_one(DataTable)
+            return [str(column.label) for column in table.columns.values()]
+
+    labels = asyncio.run(go())
+    assert "Status" in labels and "Actions" not in labels
+    assert "Adapter" not in labels
+    assert "Runtime" not in labels and "Lang" not in labels
+
+
+def test_download_progress_also_drives_the_bar(app, monkeypatch):
+    from types import SimpleNamespace
+
+    from textual.widgets import ProgressBar
+
+    resolved = SimpleNamespace(repo_id="u/r", family=SimpleNamespace(runs_repo_code=False))
+    on_disk = {"bytes": 0}
+    monkeypatch.setattr(tui, "canonical", lambda resolved: resolved.repo_id)
+    monkeypatch.setattr(tui.store, "download_size", lambda resolved: 2_000_000_000)
+    monkeypatch.setattr(tui.store, "bytes_on_disk", lambda repo_id: on_disk["bytes"])
+
+    async def go():
+        async with app.run_test(size=(160, 36)) as pilot:
+            timer = await app.show_progress(resolved)
+            assert "show" in app.query_one("#job-bar").classes
+            on_disk["bytes"] = 500_000_000
+            await pilot.pause(0.7)
+            bar = app.query_one("#progress", ProgressBar)
+            progress, status = bar.progress, str(app.query_one("#status").render())
+            timer.stop()
+            await pilot.pause()
+            return progress, status, "show" in app.query_one("#job-bar").classes
+
+    progress, status, shown_after_stop = asyncio.run(go())
+    assert progress == 500_000_000
+    assert "500.0 MB / 2.0 GB · 25%" in status
+    assert not shown_after_stop
+
+
+@pytest.mark.parametrize(
+    ("env", "platform", "launcher"),
+    [
+        ({"TMUX": "1"}, "linux", "tmux"),
+        ({"TERM_PROGRAM": "WezTerm"}, "linux", "wezterm"),
+        ({"TERM_PROGRAM": "iTerm.app"}, "darwin", "osascript"),
+        ({"TERM_PROGRAM": "ghostty"}, "darwin", "osascript"),
+        ({}, "linux", None),
+    ],
+)
+def test_logs_open_in_a_new_terminal_tab_where_it_can(monkeypatch, env, platform, launcher):
+    for name in ("TMUX", "TERM_PROGRAM"):
+        monkeypatch.delenv(name, raising=False)
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setattr(tui.sys, "platform", platform)
+    launched = []
+    monkeypatch.setattr(tui.subprocess, "Popen", lambda command, **kwargs: launched.append(command))
+    opened = tui.open_terminal(["tail", "-F", "/a b/server.log"])
+    assert opened is (launcher is not None)
+    assert [command[0] for command in launched] == ([launcher] if launcher else [])
+    if launched:
+        assert "/a b/server.log" in " ".join(launched[0])
+
+
+def test_logs_key_says_what_to_run_when_no_tab_can_open(app, monkeypatch):
+    monkeypatch.setattr(tui, "open_terminal", lambda command: False)
+    notes = []
+    monkeypatch.setattr(app, "notify", lambda message, **kwargs: notes.append(message))
+
+    async def go():
+        async with app.run_test(size=(160, 36)) as pilot:
+            await pilot.press("l")
+            await pilot.pause()
+
+    asyncio.run(go())
+    assert len(notes) == 1 and "tail -F" in notes[0] and "server.log" in notes[0]

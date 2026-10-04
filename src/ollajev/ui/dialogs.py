@@ -23,17 +23,18 @@ from . import repl
 log = logging.getLogger(__name__)
 
 
-def buttons(*specs: tuple[str, str, str], row_id: str | None = None) -> Horizontal:
-    """A row of clickable buttons, each (label, action, variant). A click runs the action its key would."""
-    row = [Button(label, id=f"do-{action}", variant=variant, compact=True) for label, action, variant in specs]  # type: ignore[arg-type]
+def label(text: str, key: str) -> str:
+    """A button's label with its key in brackets before it, dimmed: every button in the app shows its key the same way."""
+    return f"[dim]\\[{key}][/] {text}"
+
+
+def buttons(*specs: tuple[str, str, str, str], row_id: str | None = None) -> Horizontal:
+    """A row of clickable buttons, each (label, action, variant, key). A click runs the action its key would."""
+    row = [
+        Button(label(text, key), id=f"do-{action}", variant=variant, compact=True)  # type: ignore[arg-type]
+        for text, action, variant, key in specs
+    ]
     return Horizontal(*row, classes="buttons", id=row_id)
-
-
-def close_button(action: str) -> Horizontal:
-    """The ✕ in a dialog's top right corner; it runs the dialog's own close or cancel action, like Esc."""
-    button = Button("✕", id=f"close-{action}", compact=True, classes="close")
-    button.can_focus = False  # Tab and Enter stay with the dialog's fields and its main buttons
-    return Horizontal(button, classes="close-row")
 
 
 class Clickable:
@@ -41,10 +42,9 @@ class Clickable:
 
     async def on_button_pressed(self, event: Button.Pressed) -> None:
         button_id = event.button.id or ""
-        prefix = next((prefix for prefix in ("do-", "close-") if button_id.startswith(prefix)), None)
-        if prefix:
+        if button_id.startswith("do-"):
             event.stop()
-            await self.run_action(button_id.removeprefix(prefix))  # type: ignore[attr-defined]
+            await self.run_action(button_id.removeprefix("do-"))  # type: ignore[attr-defined]
 
 
 class Prompt(Clickable, ModalScreen[str | None]):
@@ -57,9 +57,8 @@ class Prompt(Clickable, ModalScreen[str | None]):
     def compose(self) -> ComposeResult:
         with Vertical(classes="dialog") as box:
             box.border_title = self.heading
-            yield close_button("cancel")
             yield Input(placeholder=self.placeholder)
-            yield buttons(("✓ OK", "submit", "primary"), ("✕ Cancel", "cancel", "default"))
+            yield buttons(("✓ OK", "submit", "primary", "enter"), ("✕ Cancel", "cancel", "default", "esc"))
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         self.action_submit()
@@ -102,21 +101,20 @@ class AddModel(Clickable, ModalScreen[str | None]):
     def compose(self) -> ComposeResult:
         with Vertical(classes="dialog wide") as box:
             box.border_title = "Add a model from Hugging Face"
-            yield close_button("cancel")
             yield Input(placeholder="search words, user/repo or a huggingface.co link", id="query")
             yield DataTable(id="results", cursor_type="row")
             yield Static("", id="note")
             with Horizontal(classes="buttons"):
-                yield Static("type to search · click or enter picks a row", classes="hint")
-                yield Button("✕ Cancel", id="do-cancel", compact=True)
+                yield Static("type to search · ↑↓ moves · enter picks · esc closes", classes="hint")
+                yield Button(label("✕ Cancel", "esc"), id="do-cancel", compact=True)
 
     def on_mount(self) -> None:
         table = self.query_one("#results", DataTable)
         table.add_column("Model", width=64)
-        table.add_column("Size", width=9)
-        table.add_column("Downloads", width=10)
-        table.add_column("Adapter", width=18)
-        table.add_column("Runtime", width=10)
+        table.add_column("Size", width=8)
+        table.add_column("Downloads", width=6)
+        table.add_column("Runtime", width=9)
+        self.query_one("#query", Input).focus()
 
     def note(self, text: str) -> None:
         self.query_one("#note", Static).update(text)
@@ -132,8 +130,9 @@ class AddModel(Clickable, ModalScreen[str | None]):
     async def search(self, query: str, delay: float) -> None:
         await asyncio.sleep(delay)
         if not query:
+            self.note("Type words, user/repo, or paste a huggingface.co link.")
             return
-        self.note("Searching…")
+        self.note(f"Searching for '{query}' …")
         try:
             hits = await asyncio.to_thread(store.search, query, 25)
         except Exception as exc:
@@ -142,7 +141,7 @@ class AddModel(Clickable, ModalScreen[str | None]):
             return
         if not hits:
             self.show_results(hits, {}, set())
-            self.note("No models found")
+            self.note(f"No models found for '{query}' — try fewer words or user/repo.")
             return
         # The search already names every quant; only their download sizes need a call per repo, so the rows show
         # at once and each repo's sizes fill in as they arrive.
@@ -160,7 +159,11 @@ class AddModel(Clickable, ModalScreen[str | None]):
 
         self.note(f"Reading sizes: 0/{len(hits)} models")
         await asyncio.gather(*(read_sizes(hit) for hit in hits))
-        self.note("")
+        files = sum(len(v) for v in quants.values())
+        self.note(
+            f"{len(hits)} models · {files} files — ↑↓ moves, enter picks, esc closes."
+            " Rows marked ✗ unsupported cannot run here."
+        )
 
     def show_results(self, hits: list[store.Hit], quants: dict[str, list[store.Variant]], sized: set[str]) -> None:
         table = self.query_one("#results", DataTable)
@@ -168,14 +171,13 @@ class AddModel(Clickable, ModalScreen[str | None]):
         table.clear()
         self.supported = set()
         for hit in hits:
-            # A family that runs the model gets the runtime of this variant's weight file; a repo none runs
-            # keeps the plain no and no runtime, so it reads unpickable.
+            # A repo no family runs has no runtime; its rows are marked and unpickable.
             downloads = count(hit.downloads)
-            adapter = f"✓ {hit.family}" if hit.family else "✗ unsupported"
             for variant in quants.get(hit.repo_id, []):
+                name = f"✗ {variant.name}" if not hit.family else variant.name
                 runs = runtime(variant.name) if hit.family else ""
                 size = human(variant.size) if hit.repo_id in sized else "…"
-                table.add_row(variant.name, size, downloads, adapter, runs, key=variant.name)
+                table.add_row(name, size, downloads, runs, key=variant.name)
                 if hit.family:
                     self.supported.add(variant.name)
         if table.row_count:
@@ -214,10 +216,9 @@ class Confirm(Clickable, ModalScreen[bool]):
         # Anything whose safe answer is no (delete, trust code, quit mid-download) gets a red frame.
         with Vertical(classes="dialog" if self.default else "dialog danger") as box:
             box.border_title = self.heading
-            yield close_button("no")
             yield Static(self.body)
             yes_variant = "primary" if self.default else "error"
-            yield buttons(("✓ Yes", "yes", yes_variant), ("✕ No", "no", "default"))
+            yield buttons(("✓ Yes", "yes", yes_variant, "y"), ("✕ No", "no", "default", "n"))
 
     def on_mount(self) -> None:
         # The safe answer has the focus, so Enter (or a stray click on nothing) picks it.
@@ -234,7 +235,7 @@ class Confirm(Clickable, ModalScreen[bool]):
 
 
 class Info(Clickable, ModalScreen[None]):
-    BINDINGS: ClassVar = [("escape,enter,q", "close", "Close")]
+    BINDINGS: ClassVar = [("escape,enter,q", "close", "Close"), ("o", "open_link", "Open")]
 
     def __init__(self, title: str, body: str | Text, danger: bool = False, link: str | None = None) -> None:
         super().__init__()
@@ -243,12 +244,11 @@ class Info(Clickable, ModalScreen[None]):
     def compose(self) -> ComposeResult:
         with Vertical(classes="dialog danger" if self.danger else "dialog") as box:
             box.border_title = self.heading
-            yield close_button("close")
             yield Static(self.body)
             if self.link:
-                yield buttons(("⧉ HF page", "open_link", "primary"), ("✕ Close", "close", "default"))
+                yield buttons(("⧉ HF page", "open_link", "primary", "o"), ("✕ Close", "close", "default", "esc"))
             else:
-                yield buttons(("✕ Close", "close", "primary"))
+                yield buttons(("✕ Close", "close", "primary", "esc"))
 
     def action_open_link(self) -> None:
         if self.link:
@@ -280,7 +280,6 @@ class Settings(Clickable, ModalScreen[dict[str, Any] | None]):
         saved = config.load()
         with Vertical(classes="dialog") as box:
             box.border_title = "Settings"
-            yield close_button("cancel")
             with Horizontal(classes="field"):
                 yield Static("Device")
                 yield Select(
@@ -305,7 +304,7 @@ class Settings(Clickable, ModalScreen[dict[str, Any] | None]):
                     str(saved.get("max_loaded_models", 1)), id="max_loaded_models", type="integer", compact=True
                 )
             yield Static(f"Saved in {config.config_path()}; an OLLAJEV_* variable overrides it.", classes="hint")
-            yield buttons(("✓ Save", "save", "primary"), ("✕ Cancel", "cancel", "default"))
+            yield buttons(("✓ Save", "save", "primary", "enter"), ("✕ Cancel", "cancel", "default", "esc"))
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         self.action_save()
@@ -363,21 +362,22 @@ class Ask(Clickable, ModalScreen[None]):
     def compose(self) -> ComposeResult:
         with Vertical(classes="dialog") as box:
             box.border_title = f"Ask {self.model}"
-            yield close_button("close")
-            yield Static("State")
+            yield Static("State — what the model should decide about")
             yield TextArea(id="state")
-            yield Static("Questions, one per line")
+            yield Static("Questions, one per line — noul:, choice: … | a, b, or score: … | low, high")
             yield TextArea(
                 id="questions",
                 placeholder="noul: The customer asks for a refund.\nchoice: Which team? | billing, support, sales",
             )
+            yield Static("ctrl+s asks · esc closes · answers newest-first below", id="ask-hint")
             with VerticalScroll(id="answers-box"):
                 yield Static("", id="answers")
-            yield buttons(("▶ Ask", "send", "primary"), ("✕ Close", "close", "default"))
+            yield buttons(("▶ Ask", "send", "primary", "^s"), ("✕ Close", "close", "default", "esc"))
 
     def on_mount(self) -> None:
         self.show(f"Loading {self.model} …")
         self.connect()
+        self.query_one("#state", TextArea).focus()
 
     def show(self, text: str) -> None:
         # A load or answer can finish after Esc closed this dialog; there is nothing left to update then.
@@ -401,17 +401,23 @@ class Ask(Clickable, ModalScreen[None]):
             return
         state = self.query_one("#state", TextArea).text.strip()
         questions: dict[str, Any] = {}
-        for line in self.query_one("#questions", TextArea).text.splitlines():
+        for lineno, line in enumerate(self.query_one("#questions", TextArea).text.splitlines(), start=1):
             if line.strip():
                 parsed = repl.parse_question(line.strip())
                 if parsed is None:
-                    self.query_one("#answers", Static).update(f"not a question: {line.strip()}")
+                    self.query_one("#answers", Static).update(
+                        f"Line {lineno} is not a question: {line.strip()}\n"
+                        "Use noul: …, choice: … | a, b, or score: … | low, high."
+                    )
                     return
                 questions[f"q{len(questions) + 1}"] = parsed[1]
         if not state or not questions:
-            self.query_one("#answers", Static).update("Enter a state and at least one question.")
+            missing = "a state" if not state else "at least one question"
+            self.query_one("#answers", Static).update(
+                f"Enter {missing} first — e.g. a state plus 'choice: Which team? | billing, support'."
+            )
             return
-        self.query_one("#answers", Static).update("Thinking…")
+        self.query_one("#answers", Static).update("Thinking… (esc closes, the answer lands below)")
         self.send(state, questions)
 
     @work(thread=True, exclusive=True)

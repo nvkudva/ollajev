@@ -196,23 +196,25 @@ Run `ollajev <command> --help` for options and an example.
 
 ### Model manager
 
-`ollajev setup` opens one screen for the model commands. Move with the arrow keys or the mouse. Every row has buttons: Download for a model not on disk yet, then Serve and Delete, and Info. The menu bar at the top (Add, Default, Filter, Settings, Help, Quit) can be clicked or used with its keys. Serve starts the server right there: a Server panel shows its address and model, with Web Demo, Restart and Stop; quitting the manager stops it. The key bar under the list and the buttons in every dialog can be clicked too. The keys:
+`ollajev setup` opens one screen for the model commands. Move with the arrow keys or the mouse. The Selected panel under the list shows the model at the cursor and buttons for what applies to it: Download for a model not on disk yet, then Serve, Default, Unload and Delete, and Info. The status row at the bottom lists the keys for that model. The menu bar at the top (Add, Filter, Settings, Keys, Quit) can be clicked or used with its keys. Every button shows its key in brackets before its label. Serve starts the server right there: a Server panel shows its address and model, with Demo, Logs, Restart and Stop; quitting the manager stops it. Logs follows the server log in a new terminal tab. The buttons in every dialog can be clicked too. The keys:
 
 | Key | Same as | What it does |
 |---|---|---|
 | Enter | `pull` + default | download the model if needed (it asks first, with the size) and make it the default |
 | `d` | | make a downloaded model the default |
 | `p` | `pull` | download only |
-| `r` | `run` | ask the model questions |
 | `u` | `stop` | unload it from memory |
 | `x` | `rm` | delete the download |
 | `a` | `cp` | give it a short name |
 | `i` | `show` | family, commit, limits, path |
 | `n` | `pull` | add any Hugging Face repo by name |
 | `w` | | open the demo page of the running server |
+| `l` | | follow the server logs in a new terminal tab |
 | `o` | | settings: device, address, port, how long an idle model stays loaded, models in memory; saved in `~/.ollajev/config.json` |
 | `b` | `service` | install or remove the background service |
-| `s` | `serve` | start the server for the default model, or restart it |
+| `s` | `serve` | serve the selected model: it becomes the default, and the server starts or restarts with it |
+| `R` | | restart the server |
+| `S` | | stop the server |
 | `/` | | filter the list by name |
 | Ctrl+R | | refresh the list |
 | `e` | | the last error in full |
