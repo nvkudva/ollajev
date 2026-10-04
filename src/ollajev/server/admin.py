@@ -63,8 +63,9 @@ def tags() -> list[dict[str, Any]]:
     """One entry per downloaded weight file: a GGUF repo with two quants on disk is two models, and so is an ONNX
     repo with two exports."""
     out = []
+    pins = store.pins()  # one config read, not one per downloaded repo
     for repo_id, (_, modified) in sorted(store.downloaded().items()):
-        revision = store.pins()[repo_id]
+        revision = pins[repo_id]
         rev = store.snapshot(repo_id, revision)
         if rev is None:
             continue
@@ -148,7 +149,7 @@ def report_bytes(resolved: store.Resolved, status: str, events: queue.Queue[dict
 
     def poll() -> None:
         last = -1
-        while not done.wait(0.5):
+        while not done.wait(1.0):
             completed = min(store.bytes_on_disk(resolved.repo_id) - start, total)
             if completed != last:
                 last = completed

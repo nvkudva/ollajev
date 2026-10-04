@@ -35,8 +35,6 @@ dependencies = [
     "decider-ai>=1.8.1,<2",
     "llama-cpp-python>=0.3.36,<0.4",
     "peft>=0.21,<1",
-    "torchvision>=0.29,<1",
-    "pillow>=12.3,<13",
     "platformdirs>=4.5,<5",
     "psutil>=7.2,<8",
     "onnxruntime>=1.30.0",
@@ -78,7 +76,6 @@ explicit = true
 
 [tool.uv.sources]
 torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
-torchvision = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/ollajev"]

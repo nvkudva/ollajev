@@ -193,8 +193,7 @@ def system_one(req: Annotated[SystemOneRequest, Body()], response: Response) -> 
     requested_at = time.time()
     try:
         started = time.monotonic()
-        manager.get(req.model)  # loads the model when it is not in memory, so the load is timed on its own
-        loaded = time.monotonic()
+        # One resolve: run() loads when needed, so no separate get() (which re-resolved offline) first.
         slot, result = manager.run(req.model, req.state, questions)
         finished = time.monotonic()
         answers = normalize.answers(questions, result["answers"])
@@ -202,9 +201,15 @@ def system_one(req: Annotated[SystemOneRequest, Body()], response: Response) -> 
         return _model_error(exc)
     except ValueError as exc:
         return _invalid(["body", "questions"], str(exc))
+    if slot.loaded_at >= requested_at:
+        # This request loaded the model: loaded_at (wall clock) minus the request start is the load.
+        load_seconds = max(0.0, slot.loaded_at - requested_at)
+        run_seconds = max(0.0, (finished - started) - load_seconds)
+    else:
+        load_seconds, run_seconds = None, finished - started
     response.headers["server-timing"] = _server_timing(
-        load_seconds=loaded - started if slot.loaded_at >= requested_at else None,
-        run_seconds=finished - loaded,
+        load_seconds=load_seconds,
+        run_seconds=run_seconds,
     )
     usage = result.get("usage") or {}
     return {

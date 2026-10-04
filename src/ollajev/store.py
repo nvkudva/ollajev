@@ -5,6 +5,7 @@ from __future__ import annotations
 import functools
 import socket
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -79,12 +80,39 @@ class Resolved:
         return self.ref.repo_id
 
 
-def scan_cache_dir(cache_dir: str | None = None) -> HFCacheInfo | None:
-    """The Hugging Face cache, or None before anything was ever downloaded to it."""
+SCAN_TTL = 2.0  # seconds a full cache walk is reused; downloads and deletes invalidate it
+_scan_memo: tuple[float, str | None, HFCacheInfo | None] | None = None
+_scan_lock = threading.Lock()
+
+
+def scan_cache_dir(cache_dir: str | None = None, *, refresh: bool = False) -> HFCacheInfo | None:
+    """The Hugging Face cache, or None before anything was ever downloaded to it.
+
+    A full cache walk is reused for SCAN_TTL seconds, so listing calls that scan once per
+    repo (snapshot/downloaded/tags) do one walk instead of N. Mutations refresh it; see download/delete.
+    """
+    global _scan_memo
+    now = time.monotonic()
+    with _scan_lock:
+        if not refresh and _scan_memo is not None:
+            at, memo_dir, memo = _scan_memo
+            if memo_dir == cache_dir and now - at < SCAN_TTL:
+                return memo
     try:
-        return _scan_cache_dir(cache_dir)
+        info: HFCacheInfo | None = _scan_cache_dir(cache_dir)
     except CacheNotFound:
-        return None
+        info = None
+    with _scan_lock:
+        _scan_memo = (now, cache_dir, info)
+    return info
+
+
+def refresh_scan_cache(cache_dir: str | None = None) -> None:
+    """Forget the memoized cache walk, after a download or delete changed what is on disk."""
+    global _scan_memo
+    with _scan_lock:
+        if _scan_memo is None or _scan_memo[1] == cache_dir:
+            _scan_memo = None
 
 
 def pins() -> dict[str, str]:
@@ -345,14 +373,12 @@ def listed_variants(hit: Hit) -> list[Variant]:
 def variants(repo_id: str) -> list[Variant]:
     """A repo's GGUF quants or ONNX exports, or its full weights, with download sizes, smallest first."""
     api = HfApi()
-    info = api.model_info(repo_id, files_metadata=True)
+    info = api.model_info(repo_id, files_metadata=True, expand=["baseModels"])
     sizes = {s.rfilename: s.size or 0 for s in info.siblings or []}
     family = _family(repo_id, list(sizes))
     copy = False
     if family is None:
-        family = _family(
-            repo_id, list(sizes), getattr(api.model_info(repo_id, expand=["baseModels"]), "base_models", None)
-        )
+        family = _family(repo_id, list(sizes), getattr(info, "base_models", None))
         copy = family is not None
     return _variants(repo_id, info.sha or "", sizes, family, copy=copy)
 
@@ -433,6 +459,7 @@ def download(resolved: Resolved, cancel: threading.Event | None = None) -> str:
             }
     if resolved.repo_id not in pins():
         _pin(resolved.repo_id, resolved.revision, resolved.created)
+    refresh_scan_cache(config.models_dir())
     return path
 
 
@@ -534,6 +561,7 @@ def delete(repo_id: str) -> int:
         data.get("released", {}).pop(repo_id, None)
         data.get("bases", {}).pop(repo_id, None)
         data["trusted"] = [t for t in data.get("trusted", []) if not t.startswith(f"{repo_id}@")]
+    refresh_scan_cache(config.models_dir())
     return freed
 
 

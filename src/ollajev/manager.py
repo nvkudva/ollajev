@@ -41,13 +41,26 @@ WEIGHT_SUFFIXES = (".safetensors", ".gguf", ".onnx", ".onnx_data", ".data", ".bi
 MEMORY_HEADROOM = 1.1  # activations and runtime buffers on top of the weights
 
 
+_weights_memo: dict[str, tuple[float, int]] = {}  # snapshot dir -> (dir mtime, weights bytes)
+
+
 def weights_size(path: str) -> int:
-    return sum(
+    """Bytes of weight files under `path`. A load stats a multi-GB snapshot, so a result is reused
+    while the snapshot dir's mtime is unchanged (downloads write new files, which bump it)."""
+    try:
+        stamp = os.path.getmtime(path)
+    except OSError:
+        return 0
+    if (memo := _weights_memo.get(path)) is not None and memo[0] == stamp:
+        return memo[1]
+    size = sum(
         os.path.getsize(os.path.join(root, f))
         for root, _, files in os.walk(path)
         for f in files
         if f.endswith(WEIGHT_SUFFIXES)
     )
+    _weights_memo[path] = (stamp, size)
+    return size
 
 
 def free_memory(device: str) -> int:
@@ -94,8 +107,13 @@ class Manager:
         self._slots: dict[str, Slot] = {}
         self._guard = threading.RLock()
         self._load_lock = threading.Lock()  # one load at a time: loads are memory spikes
+        self._stop = threading.Event()
         self._reaper = threading.Thread(target=self._reap, name="ollajev-reaper", daemon=True)
         self._reaper.start()
+
+    def stop(self) -> None:
+        """Wake the reaper so it exits; the thread is a daemon, so this is only for tests."""
+        self._stop.set()
 
     def resolve(self, name: str | None) -> store.Resolved:
         try:
@@ -183,8 +201,7 @@ class Manager:
             return list(self._slots.values())
 
     def _reap(self) -> None:
-        while True:
-            time.sleep(1)
+        while not self._stop.wait(1 if self._slots else 5):
             now = time.monotonic()
             for slot in self.loaded():
                 if slot.expires <= now and not slot.lock.locked():

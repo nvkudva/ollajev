@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import copy
 import json
 import logging
 import os
@@ -121,22 +122,42 @@ def _legacy_path() -> Path:
     return Path(platformdirs.user_config_dir(APP, appauthor=False)) / "config.json"
 
 
+_load_memo: tuple[str, int, int, dict[str, Any]] | None = None  # path, mtime_ns, size, data
+
+
 def load() -> dict[str, Any]:
+    """The saved settings. The file is re-read only when its size or mtime changed, so the several
+    reads per request (pins, aliases, keep-alive) do one parse; the result is a copy, mutate it via edit()."""
+    global _load_memo
     path = config_path()
     if not path.exists() and "OLLAJEV_HOME" not in os.environ and _legacy_path().exists():
         path = _legacy_path()  # first run after the move to ~/.ollajev; the next save writes the new file
     try:
-        return json.loads(path.read_text())
+        stat = path.stat()
+    except OSError:
+        return {}
+    key = (str(path), stat.st_mtime_ns, stat.st_size)
+    with _lock:
+        if _load_memo is not None and _load_memo[:3] == key:
+            return copy.deepcopy(_load_memo[3])
+    try:
+        data = json.loads(path.read_text())
     except FileNotFoundError:
         return {}
     except json.JSONDecodeError:
         backup = path.with_suffix(".json.bad")
         path.replace(backup)
         log.warning("%s is not valid JSON; moved it to %s and started with empty settings", path, backup)
+        with _lock:
+            _load_memo = None
         return {}
+    with _lock:
+        _load_memo = (*key, copy.deepcopy(data))
+    return data
 
 
 def save(data: dict[str, Any]) -> None:
+    global _load_memo
     path = config_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     with _lock:
@@ -151,6 +172,12 @@ def save(data: dict[str, Any]) -> None:
             with contextlib.suppress(OSError):
                 os.unlink(tmp)
             raise
+        try:
+            stat = path.stat()
+        except OSError:
+            _load_memo = None
+        else:
+            _load_memo = (str(path), stat.st_mtime_ns, stat.st_size, copy.deepcopy(data))
 
 
 @contextlib.contextmanager
