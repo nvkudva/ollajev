@@ -396,12 +396,16 @@ def listed_variants(hit: Hit) -> list[Variant]:
 def variants(repo_id: str) -> list[Variant]:
     """A repo's GGUF quants or ONNX exports, or its full weights, with download sizes, smallest first."""
     api = HfApi()
-    info = api.model_info(repo_id, files_metadata=True, expand=["baseModels"])
+    # Two calls: the Hub forbids files_metadata together with expand, so the base-model lookup for
+    # unrecognized repos is a second call, not a merged one.
+    info = api.model_info(repo_id, files_metadata=True)
     sizes = {s.rfilename: s.size or 0 for s in info.siblings or []}
     family = _family(repo_id, list(sizes))
     copy = False
     if family is None:
-        family = _family(repo_id, list(sizes), getattr(info, "base_models", None))
+        family = _family(
+            repo_id, list(sizes), getattr(api.model_info(repo_id, expand=["baseModels"]), "base_models", None)
+        )
         copy = family is not None
     return _variants(repo_id, info.sha or "", sizes, family, copy=copy)
 

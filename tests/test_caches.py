@@ -31,11 +31,13 @@ class _FakeApi:
         self.calls.append(repo_id)
         if repo_id in self.missing:
             raise httpx.ConnectError("gone")  # caught like RepositoryNotFoundError
+        if kwargs.get("files_metadata") and kwargs.get("expand"):
+            raise ValueError("`expand` cannot be used if `securityStatus` or `files_metadata` are set.")
         return SimpleNamespace(
             sha="b" * 40,
             created_at=None,
             downloads=7,
-            siblings=[SimpleNamespace(rfilename=f) for f in self.files.get(repo_id, [])],
+            siblings=[SimpleNamespace(rfilename=f, size=100) for f in self.files.get(repo_id, [])],
             base_models=None,
         )
 
@@ -102,6 +104,13 @@ def test_listing_reuses_downloads_and_family(hub):
     assert first[0] == 7
     assert store.listing("u/r") == first
     assert hub.calls == ["u/r"]
+
+
+def test_variants_sizes_come_from_files_metadata(hub):
+    """The add-model dialog shows 0 for every size when the per-repo lookup raises."""
+    hub.files["u/r"] = ["m-Q4_K_M.gguf", "tokenizer.json"]
+    found = store.variants("u/r")
+    assert found and all(v.size > 0 for v in found)
 
 
 def test_weights_size_rewalks_when_the_snapshot_grows(tmp_path):
