@@ -51,7 +51,8 @@ irm https://raw.githubusercontent.com/nvkudva/ollajev/main/install.ps1 | iex
   login: a launchd agent on macOS, a systemd user unit on Linux.
 - On Linux, llama.cpp is compiled during the install, so a C and C++ compiler must be present:
   `sudo apt install build-essential` on Debian and Ubuntu, `sudo dnf install gcc gcc-c++` on Fedora.
-  The script checks and says so. Linux gets the CPU build of PyTorch; for an NVIDIA GPU, see `pyproject.toml`.
+  The script checks and says so. On macOS the same build needs the Xcode Command Line Tools
+  (`xcode-select --install`); the script checks that they can compile C++. Linux gets the CPU build of PyTorch; for an NVIDIA GPU, see `pyproject.toml`.
 - Already have uv? `uv tool install ollajev` installs it from PyPI. On Linux, add
   `--index https://download.pytorch.org/whl/cpu`; without it PyPI's PyTorch brings the CUDA libraries,
   several GB. The script above takes the CPU build by itself.

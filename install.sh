@@ -56,12 +56,26 @@ if [ -z "$SOURCE" ]; then
   fi
 fi
 
-# Linux has no prebuilt llama-cpp-python wheel, so it is compiled during the install.
+# PyPI ships llama-cpp-python as source only, so llama.cpp is compiled during the install.
 if [ "$(uname -s)" = Linux ] && ! { command -v cc >/dev/null 2>&1 && command -v c++ >/dev/null 2>&1; }; then
   echo "Ollajev needs a C and C++ compiler on Linux to build llama.cpp. Install one, then run this again:" >&2
   echo "    Debian, Ubuntu:  sudo apt install build-essential" >&2
   echo "    Fedora:          sudo dnf install gcc gcc-c++" >&2
   echo "    Arch:            sudo pacman -S base-devel" >&2
+  exit 1
+fi
+
+# Compile a C++ include, not just `xcode-select -p`: an update can leave the tools without their C++ headers.
+if [ "$(uname -s)" = Darwin ] && ! printf '#include <mutex>\n' | c++ -x c++ -std=c++17 -fsyntax-only - >/dev/null 2>&1; then
+  if xcode-select -p >/dev/null 2>&1; then
+    echo "Ollajev builds llama.cpp, but your Xcode Command Line Tools cannot compile C++ (headers missing)." >&2
+    echo "Reinstall them, then run this again:" >&2
+    echo "    sudo rm -rf /Library/Developer/CommandLineTools" >&2
+    echo "    xcode-select --install" >&2
+  else
+    echo "Ollajev builds llama.cpp, which needs the Xcode Command Line Tools. Install them, then run this again:" >&2
+    echo "    xcode-select --install" >&2
+  fi
   exit 1
 fi
 
