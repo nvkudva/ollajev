@@ -51,12 +51,12 @@
 - [x] Create GitHub repo nvkudva/ollajev and push (needs user go-ahead)
 - [ ] Test install.ps1 on Windows (piped install.sh tested on macOS)
 - [x] Verify CI on GitHub runners (llama-cpp-python builds from source on Linux and Windows)
-- [ ] PyPI release with trusted publishing on a version tag
+- [x] PyPI release with trusted publishing on a version tag
 - [ ] Shell completion (optional)
 - [x] Rename the local project folder from free-jev-server to ollajev
-- [ ] Homebrew: tap repo nvkudva/homebrew-tap with Formula/ollajev.rb (depends_on uv, venv in libexec pinned to the PyPI version, service block running `ollajev serve --no-browser`, test block `ollajev --version`); needs the PyPI release first
-- [ ] Homebrew: GitHub Action to bump formula version and sha256 on each PyPI release
-- [ ] Homebrew: README "Install with Homebrew" section (`brew install nvkudva/tap/ollajev`, `brew services start ollajev`; do not combine with `ollajev service install`)
+- [x] Homebrew: tap repo nvkudva/homebrew-tap with Formula/ollajev.rb (depends_on uv, venv in libexec pinned to the PyPI version, service block running `ollajev serve --no-browser`, test block `ollajev --version`); needs the PyPI release first
+- [x] Homebrew: GitHub Action to bump formula version and sha256 on each PyPI release
+- [x] Homebrew: README "Install with Homebrew" section (`brew install nvkudva/tap/ollajev`, `brew services start ollajev`; do not combine with `ollajev service install`)
 - [x] Add clef, von, rlcd, onejev and jevk5 families
 - [x] Run laya ONNX weights; weight files replace .gguf across the store
 - [ ] Compare llama.cpp `llama serve` /v1/systemone (ggml-org Kev-4B-GGUF) with our kev adapter; if output matches, add an optional llama.cpp backend for Julia-1, Laya, Kev-4B, lev, OpenJev

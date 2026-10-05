@@ -54,3 +54,42 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --generate-notes --verify-tag
+
+  homebrew:
+    # Points nvkudva/homebrew-tap's formula at the new PyPI release. Needs a HOMEBREW_TAP_TOKEN secret:
+    # a fine-grained token with contents read and write on nvkudva/homebrew-tap only.
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+    steps:
+      - name: Skip without a tap token
+        if: env.TAP_TOKEN == ''
+        run: echo "::notice::HOMEBREW_TAP_TOKEN is not set; update the Homebrew formula by hand"
+      - name: Read the sdist URL and checksum from PyPI
+        if: env.TAP_TOKEN != ''
+        id: sdist
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          json=$(curl -fsSL --retry 10 --retry-delay 15 --retry-all-errors "https://pypi.org/pypi/ollajev/$version/json")
+          echo "url=$(echo "$json" | jq -r '.urls[] | select(.packagetype=="sdist") | .url')" >> "$GITHUB_OUTPUT"
+          echo "sha256=$(echo "$json" | jq -r '.urls[] | select(.packagetype=="sdist") | .digests.sha256')" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        if: env.TAP_TOKEN != ''
+        with:
+          repository: nvkudva/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+      - name: Update the formula and push
+        if: env.TAP_TOKEN != ''
+        env:
+          URL: ${{ steps.sdist.outputs.url }}
+          SHA256: ${{ steps.sdist.outputs.sha256 }}
+        run: |
+          test -n "$URL" && test -n "$SHA256"
+          sed -i -E "s|^  url \".*\"|  url \"$URL\"|; s|^  sha256 \".*\"|  sha256 \"$SHA256\"|" Formula/ollajev.rb
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "ollajev ${GITHUB_REF_NAME#v}"
+          git push

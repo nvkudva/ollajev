@@ -30,6 +30,12 @@ macOS and Linux:
 curl -fsSL https://raw.githubusercontent.com/nvkudva/ollajev/main/install.sh | sh
 ```
 
+Homebrew (macOS and Linux):
+
+```sh
+brew install nvkudva/tap/ollajev
+```
+
 Windows (PowerShell):
 
 ```powershell
@@ -46,6 +52,8 @@ irm https://raw.githubusercontent.com/nvkudva/ollajev/main/install.ps1 | iex
 - Already have uv? `uv tool install ollajev` installs it from PyPI. On Linux, add
   `--index https://download.pytorch.org/whl/cpu`; without it PyPI's PyTorch brings the CUDA libraries,
   several GB. The script above takes the CPU build by itself.
+- With Homebrew, `brew services start ollajev` runs the server in the background at login. Use that
+  or `ollajev service install`, not both. `brew uninstall ollajev` removes it.
 - To remove it, see [Uninstall](#uninstall).
 
 ## Uninstall
