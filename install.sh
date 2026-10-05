@@ -66,11 +66,22 @@ if [ "$(uname -s)" = Linux ] && ! { command -v cc >/dev/null 2>&1 && command -v 
   exit 1
 fi
 
-# Compile a C++ include, not just `xcode-select -p`: an update can leave the tools without their C++ headers.
-if [ "$(uname -s)" = Darwin ] && ! printf '#include <mutex>\n' | c++ -x c++ -std=c++17 -fsyntax-only - >/dev/null 2>&1; then
+# Build and link a C and a C++ program, as CMake does: an update can leave the tools without
+# their C++ headers or SDK libraries, which `xcode-select -p` and a syntax-only check both miss.
+cc_works() {
+  t=$(mktemp -d)
+  printf 'int main(void) { return 0; }\n' > "$t/t.c"
+  printf '#include <mutex>\nint main() { return 0; }\n' > "$t/t.cpp"
+  cc_err=$( { cc "$t/t.c" -o "$t/c" && c++ -std=c++17 "$t/t.cpp" -o "$t/cpp"; } 2>&1 ) && rc=0 || rc=1
+  rm -rf "$t"
+  return $rc
+}
+if [ "$(uname -s)" = Darwin ] && ! cc_works; then
   if xcode-select -p >/dev/null 2>&1; then
-    echo "Ollajev builds llama.cpp, but your Xcode Command Line Tools cannot compile C++ (headers missing)." >&2
-    echo "Reinstall them, then run this again:" >&2
+    echo "Ollajev builds llama.cpp, but your Xcode Command Line Tools cannot build a test program:" >&2
+    printf '%s\n' "$cc_err" | tail -5 | sed 's/^/    /' >&2
+    echo "If that mentions a license, run: sudo xcodebuild -license accept" >&2
+    echo "Otherwise reinstall the tools, then run this again:" >&2
     echo "    sudo rm -rf /Library/Developer/CommandLineTools" >&2
     echo "    xcode-select --install" >&2
   else
