@@ -107,11 +107,13 @@ kbd { display: inline-grid; place-items: center; min-width: 28px; height: 28px; 
 /* ---------- Hero ---------- */
 .hero { padding: 80px 0 56px; }
 .hero-grid { display: grid; gap: 48px; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); align-items: end; }
-.hero h1 { font-size: clamp(42px, 7.4vw, 92px); line-height: .92; font-weight: 800; letter-spacing: -0.045em; font-variation-settings: "opsz" 96; }
+.hero h1 { font-size: clamp(38px, 6.2vw, 78px); line-height: .92; font-weight: 800; letter-spacing: -0.045em; font-variation-settings: "opsz" 96; }
 .hero h1 span { display: block; color: var(--muted); font-weight: 500; }
 .hero .pitch { font-size: 19px; color: var(--muted); max-width: 46ch; margin: 0 0 22px; }
 .hero .cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 18px; }
-.hero .install { margin: 0; }
+.hero .install { margin: 0; min-width: 0; }
+.installs { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); max-width: 860px; margin-top: 40px; }
+@media (max-width: 860px) { .installs { margin-top: 28px; } }
 .hero .install figcaption { font-size: 14px; color: var(--muted); margin-bottom: 8px; }
 @media (max-width: 860px) { .hero-grid { grid-template-columns: minmax(0, 1fr); gap: 28px; } .hero { padding-top: 52px; } }
 
@@ -351,8 +353,9 @@ const EXAMPLES = {
 
 const INSTALL = {
   "macOS / Linux": `curl -fsSL ${RAW}/install.sh | sh`,
+  Homebrew: "brew install nvkudva/tap/ollajev",
   Windows: `irm ${RAW}/install.ps1 | iex`,
-  uv: `uv tool install git+${REPO}`,
+  uv: "uv tool install ollajev",
 };
 
 const SHOTS = {
@@ -557,15 +560,21 @@ function Hero() {
       <h1 id="hero-title">Like Ollama, for decision models. <span>Browse, search, download, serve.</span></h1>
       <div>
         <p class="pitch">Ollajev manages System One decision models from Hugging Face in one terminal screen, then serves them on your machine behind TypeSafe's <code>/v1/systemone</code> API.</p>
-        <figure class="install">
-          <figcaption>Install on macOS or Linux</figcaption>
-          <${Command} text=${INSTALL["macOS / Linux"]} label="install command" />
-        </figure>
         <div class="cta">
           <a class="btn primary" href="#start">Quick start</a>
           <a class="btn" href=${REPO}><${GitHubIcon} />View on GitHub</a>
         </div>
       </div>
+    </div>
+    <div class="installs">
+      <figure class="install">
+        <figcaption>Install on macOS or Linux</figcaption>
+        <${Command} text=${INSTALL["macOS / Linux"]} label="install command" />
+      </figure>
+      <figure class="install">
+        <figcaption>Or with Homebrew</figcaption>
+        <${Command} text=${INSTALL.Homebrew} label="Homebrew install command" />
+      </figure>
     </div>
     <${Screenshot} shot=${SHOTS.models}
       caption=${html`The model manager, opened with <code>ollajev setup</code>. Pick a model, press <kbd>Enter</kbd> to download it, then <kbd>s</kbd> to serve.`} />
@@ -609,7 +618,7 @@ function InstallStep() {
   const [os, setOs] = useState(oses[0]);
   return html`<li><div>
     <h3>Install</h3>
-    <p>The installer sets up uv if it is missing, then installs Ollajev in its own Python 3.12 environment. Add <code>--service</code> to also run the server at every login.</p>
+    <p>The installer sets up uv if it is missing, then installs Ollajev in its own Python 3.12 environment. Add <code>--service</code> to also run the server at every login. With Homebrew, <code>brew services start ollajev</code> does the same.</p>
     <${Tabs} items=${oses} value=${os} onChange=${setOs} label="Operating system" controls="install-panel" />
     <div id="install-panel" role="tabpanel" aria-label=${`Install on ${os}`}><${Command} text=${INSTALL[os]} label=${`${os} install command`} /></div>
   </div></li>`;
