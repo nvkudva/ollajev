@@ -56,6 +56,7 @@ if [ -z "$SOURCE" ]; then
   fi
 fi
 
+say "checking for a C/C++ compiler"
 # PyPI ships llama-cpp-python as source only, so llama.cpp is compiled during the install.
 if [ "$(uname -s)" = Linux ] && ! { command -v cc >/dev/null 2>&1 && command -v c++ >/dev/null 2>&1; }; then
   echo "Ollajev needs a C and C++ compiler on Linux to build llama.cpp. Install one, then run this again:" >&2
@@ -90,7 +91,15 @@ if ! command -v uv >/dev/null 2>&1; then
 fi
 
 say "installing Ollajev from $SOURCE (Python 3.12, its own environment)"
+say "this compiles llama.cpp from source; expect 5-15 minutes with little output from the build"
+start=$(date +%s)
+elapsed() { s=$(( $(date +%s) - start )); printf '%dm%02ds' $((s / 60)) $((s % 60)); }
+( while sleep 30; do say "still building... $(elapsed) elapsed"; done ) &
+heartbeat=$!
+trap 'kill "$heartbeat" 2>/dev/null || true' EXIT
 uv tool install --python 3.12 --force "$SOURCE"
+kill "$heartbeat" 2>/dev/null && wait "$heartbeat" 2>/dev/null || true
+say "built and installed in $(elapsed)"
 
 case ":$PATH:" in
   *":$(uv tool dir --bin):"*) ;;
