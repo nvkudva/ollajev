@@ -358,6 +358,13 @@ const INSTALL = {
   uv: "uv tool install ollajev",
 };
 
+const UNINSTALL = {
+  "macOS / Linux": `curl -fsSL ${RAW}/install.sh | sh -s -- --uninstall`,
+  Homebrew: "brew uninstall ollajev",
+  Windows: `irm ${RAW}/install.ps1 -OutFile install.ps1; .\\install.ps1 -Uninstall`,
+  uv: "ollajev service uninstall; uv tool uninstall ollajev",
+};
+
 const SHOTS = {
   models: {
     src: "tui-models.png",
@@ -620,7 +627,9 @@ function InstallStep() {
     <h3>Install</h3>
     <p>The installer sets up uv if it is missing, then installs Ollajev in its own Python 3.12 environment. Add <code>--service</code> to also run the server at every login. With Homebrew, <code>brew services start ollajev</code> does the same.</p>
     <${Tabs} items=${oses} value=${os} onChange=${setOs} label="Operating system" controls="install-panel" />
-    <div id="install-panel" role="tabpanel" aria-label=${`Install on ${os}`}><${Command} text=${INSTALL[os]} label=${`${os} install command`} /></div>
+    <div id="install-panel" role="tabpanel" aria-label=${`Install on ${os}`}><${Command} text=${INSTALL[os]} label=${`${os} install command`} />
+      <p>To remove it later (your config in <code>~/.ollajev</code> and downloaded models are kept):</p>
+      <${Command} text=${UNINSTALL[os]} label=${`${os} uninstall command`} /></div>
   </div></li>`;
 }
 
