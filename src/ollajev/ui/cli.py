@@ -169,7 +169,7 @@ def configure_logging(path: str) -> None:
     console.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
     root.handlers = [file, console]
     # Model loads and unloads are what a person watching the server wants to see, e.g. after switching
-    # models in the demo. Only INFO here: warnings already reach the console through the root handler.
+    # models in the playground. Only INFO here: warnings already reach the console through the root handler.
     events = logging.StreamHandler()
     events.setFormatter(logging.Formatter("==> %(message)s"))
     events.addFilter(lambda record: record.levelno == logging.INFO)
@@ -262,7 +262,7 @@ def banner(base: str, model: str | None, log_file: str) -> str:
     serving = model or f"none yet; pull one with: ollajev pull {config.DEFAULT_MODEL}"
     rows = [
         ("Serving", serving),
-        ("Demo", f"{base}/demo"),
+        ("Playground", f"{base}/playground"),
         ("API", "POST /v1/systemone   answer questions about a state"),
         ("", "GET  /v1/models      downloaded models"),
         ("Manage", "GET /api/tags · /api/ps · /api/show · POST /api/pull · DELETE /api/delete"),
@@ -272,7 +272,7 @@ def banner(base: str, model: str | None, log_file: str) -> str:
     ]
     lines = ["", f"==> Ready on {base}", ""]
     for label, value in rows:
-        lines.append(f"    {label:<9}{value}")
+        lines.append(f"    {label:<11}{value}")
     lines += ["", "    A request can name any downloaded model; loads and unloads show below. Ctrl-C to stop.", ""]
     return "\n".join(lines)
 
@@ -289,7 +289,7 @@ def _announce_when_ready(base: str, model: str | None, open_browser: bool, log_f
         return
     print(banner(base, model, log_file), flush=True)
     if open_browser:
-        webbrowser.open(f"{base}/demo")
+        webbrowser.open(f"{base}/playground")
 
 
 def cmd_setup(args: argparse.Namespace) -> None:
@@ -345,7 +345,7 @@ def build_parser() -> argparse.ArgumentParser:
     def serve_options(command_parser: argparse.ArgumentParser) -> None:
         command_parser.add_argument("--host", help="bind address (default: 127.0.0.1, or OLLAJEV_HOST)")
         command_parser.add_argument("--port", type=int, help="port (default: the first free one from 8000)")
-        command_parser.add_argument("--no-browser", action="store_true", help="do not open the demo page")
+        command_parser.add_argument("--no-browser", action="store_true", help="do not open the playground page")
         command_parser.add_argument(
             "--log-file", help="request and error log (default: server.log in the OS log folder)"
         )

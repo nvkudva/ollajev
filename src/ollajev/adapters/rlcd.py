@@ -99,7 +99,7 @@ class _Rlcd:
         root = Path(path)
         calibrator = json.loads((root / "calibrator.json").read_text())
         tokenizer = AutoTokenizer.from_pretrained(path)
-        model = GLiClassModel.from_pretrained(path).to(device).eval()
+        model = GLiClassModel.from_pretrained(path).to(device).eval()  # pyright: ignore[reportArgumentType]  # gliclass's stubs type the classmethod as an instance method
 
         def predict(state: Any, questions: dict[str, dict[str, Any]]) -> dict[str, Any]:
             context = text_state(state)

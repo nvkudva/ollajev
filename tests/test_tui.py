@@ -106,15 +106,16 @@ def test_quit_keys_return_false(app, key):
 
 
 @pytest.mark.parametrize(
-    ("key", "screen"), [("o", "Settings"), ("n", "AddModel"), ("a", "Prompt"), ("i", "Info"), ("question_mark", "Info")]
+    ("key", "screen"), [("o", "Settings"), ("a", "AddModel"), ("c", "Prompt"), ("i", "Info"), ("question_mark", "Info")]
 )
 def test_keys_open_their_dialog_and_escape_closes_it(app, key, screen):
     assert drive(app, [key]) == [screen]
     assert drive(tui.Models(), [key, "escape"]) == []
 
 
-def test_ask_needs_a_downloaded_model(app):
+def test_ask_is_hidden_for_now(app):
     assert drive(app, ["r"]) == []
+    assert not any(action == "ask" for _, action, _, _ in tui.SELECTION_BUTTONS)
 
 
 def quants(repo):
@@ -277,7 +278,7 @@ def test_status_line_and_filter(app):
     async def go():
         async with app.run_test(size=(160, 36)) as pilot:
             status = str(app.query_one("#models-panel").border_subtitle)
-            await pilot.press("slash")
+            await pilot.press("f")
             await pilot.pause()
             for key in "julia":
                 await pilot.press(key)
@@ -529,21 +530,25 @@ def test_download_progress_also_drives_the_bar(app, monkeypatch):
 
 
 @pytest.mark.parametrize(
-    ("env", "platform", "launcher"),
+    ("env", "platform", "installed", "launcher"),
     [
-        ({"TMUX": "1"}, "linux", "tmux"),
-        ({"TERM_PROGRAM": "WezTerm"}, "linux", "wezterm"),
-        ({"TERM_PROGRAM": "iTerm.app"}, "darwin", "osascript"),
-        ({"TERM_PROGRAM": "ghostty"}, "darwin", "osascript"),
-        ({}, "linux", None),
+        ({"TMUX": "1"}, "linux", [], "tmux"),
+        ({"TERM_PROGRAM": "WezTerm"}, "linux", [], "wezterm"),
+        ({"TERM_PROGRAM": "iTerm.app"}, "darwin", [], "osascript"),
+        ({"TERM_PROGRAM": "ghostty"}, "darwin", [], "osascript"),
+        ({"GNOME_TERMINAL_SCREEN": "/org/gnome/1"}, "linux", ["gnome-terminal"], "gnome-terminal"),
+        ({"KONSOLE_VERSION": "240800"}, "linux", ["konsole"], "konsole"),
+        ({}, "linux", ["x-terminal-emulator"], "x-terminal-emulator"),
+        ({}, "linux", [], None),
     ],
 )
-def test_logs_open_in_a_new_terminal_tab_where_it_can(monkeypatch, env, platform, launcher):
-    for name in ("TMUX", "TERM_PROGRAM"):
+def test_logs_open_in_a_new_terminal_tab_where_it_can(monkeypatch, env, platform, installed, launcher):
+    for name in ("TMUX", "TERM_PROGRAM", "GNOME_TERMINAL_SCREEN", "KONSOLE_VERSION"):
         monkeypatch.delenv(name, raising=False)
     for name, value in env.items():
         monkeypatch.setenv(name, value)
     monkeypatch.setattr(tui.sys, "platform", platform)
+    monkeypatch.setattr(tui.shutil, "which", lambda name: f"/usr/bin/{name}" if name in installed else None)
     launched = []
     monkeypatch.setattr(tui.subprocess, "Popen", lambda command, **kwargs: launched.append(command))
     opened = tui.open_terminal(["tail", "-F", "/a b/server.log"])
@@ -626,3 +631,115 @@ def test_status_row_says_cancelling_until_the_download_stops(app, monkeypatch):
             return during
 
     assert "Cancelling download" in asyncio.run(go())
+
+
+@pytest.mark.parametrize(("width", "narrow"), [(100, True), (160, False)])
+def test_cards_stack_their_buttons_under_the_text_when_narrow(app, width, narrow):
+    async def go():
+        async with app.run_test(size=(width, 36)) as pilot:
+            await pilot.pause()
+            return ["narrow" in row.classes for row in app.query(".card-row")]
+
+    assert asyncio.run(go()) == [narrow, narrow]
+
+
+def notes_of(app, monkeypatch):
+    """The messages app.notify shows, in order."""
+    notes = []
+    monkeypatch.setattr(app, "notify", lambda message, **kwargs: notes.append(message))
+    return notes
+
+
+def test_status_row_lists_the_keys_for_a_downloaded_loaded_model(app):
+    async def go():
+        async with app.run_test(size=(160, 36)) as pilot:
+            await pilot.pause()
+            name = app.selected()
+            app.snapshot_cache = ({name: {}}, "other/model", False, {name})
+            app.say_idle()
+            return app.query_one("#status").render().plain
+
+    hint = asyncio.run(go())
+    for keys in ("enter make default", "s serve", "u unload", "c short name", "x delete", "i info"):
+        assert keys in hint
+    assert "download" not in hint
+
+
+def test_the_selected_panel_says_on_disk_or_to_download_and_describes_the_model(app):
+    async def go():
+        async with app.run_test(size=(160, 36)) as pilot:
+            await pilot.pause()
+            name = app.selected()
+            app.show_selection("other", set(), {})
+            remote = app.query_one("#selection-info").render().plain
+            app.show_selection("other", set(), {name: {}})
+            return remote, app.query_one("#selection-info").render().plain
+
+    remote, local = asyncio.run(go())
+    assert "to download" in remote and tui.DESCRIPTIONS[CATALOG[0].name.partition(":")[0]] in remote
+    assert "on disk" in local and "to download" not in local
+
+
+def test_serve_refuses_a_model_that_is_not_downloaded(app, monkeypatch):
+    monkeypatch.setattr(tui.subprocess, "Popen", lambda *a, **k: pytest.fail("a server was started"))
+    notes = notes_of(app, monkeypatch)
+    drive(app, ["s"])
+    assert notes == ["Download it first (p or Enter)"]
+
+
+def test_stop_and_restart_say_when_there_is_no_server(app, monkeypatch):
+    notes = notes_of(app, monkeypatch)
+    drive(app, ["S", "R"])
+    assert notes == ["No server is running", "No server from this window to restart"]
+
+
+def test_unload_says_when_nothing_is_loaded_and_is_quiet_when_it_unloads(app, monkeypatch):
+    notes = notes_of(app, monkeypatch)
+    released = []
+
+    async def go():
+        async with app.run_test(size=(120, 36)) as pilot:
+            await pilot.press("u")
+            await app.workers.wait_for_complete()
+            app.local = (app.selected(), None, lambda: released.append(True))
+            await pilot.press("u")
+            await app.workers.wait_for_complete()
+            return app.local
+
+    assert asyncio.run(go()) is None
+    assert released == [True] and len(notes) == 1 and notes[0].endswith("is not loaded")
+
+
+@pytest.mark.parametrize(("on_disk", "toast"), [(True, False), (False, True)])
+def test_enter_makes_the_default_and_toasts_only_a_new_download(app, monkeypatch, on_disk, toast):
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(tui.Models, "downloaded", lambda self, name: on_disk)
+    monkeypatch.setattr(tui, "canonical", lambda resolved: resolved.repo_id)
+
+    async def fetch(self, name):
+        return SimpleNamespace(repo_id=name)
+
+    monkeypatch.setattr(tui.Models, "fetch", fetch)
+    notes = notes_of(app, monkeypatch)
+
+    async def go():
+        async with app.run_test(size=(120, 36)) as pilot:
+            name = app.selected()
+            await pilot.press("enter")
+            await pilot.pause()
+            if not on_disk:
+                await pilot.press("enter")  # the Confirm dialog's default: download
+            await app.workers.wait_for_complete()
+            return name
+
+    name = asyncio.run(go())
+    assert tui.config.load()["default_model"] == name
+    assert notes == ([f"Downloaded {name}; it is now the default"] if toast else [])
+
+
+def test_button_labels_put_the_key_in_brackets_before_the_text():
+    assert tui.dialogs.label("Add", "n") == "[dim]\\[n][/] Add"
+    from textual.content import Content
+
+    assert Content.from_markup(tui.dialogs.label("Close", "esc")).plain == "[esc] Close"

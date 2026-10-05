@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import plistlib
+import sys
 from pathlib import Path
 
 import pytest
@@ -92,3 +93,38 @@ def test_ollajev_host(monkeypatch, value, expected):
 @pytest.mark.parametrize("text,seconds", [("300", 300), ("5m", 300), ("1h", 3600), ("-1", -1), (30, 30)])
 def test_keep_alive_durations(text, seconds):
     assert config.parse_duration(text) == seconds
+
+
+def test_a_failing_service_command_ends_with_its_message(monkeypatch):
+    import subprocess
+
+    def run(cmd, **kwargs):
+        return subprocess.CompletedProcess(cmd, 1, "", "Failed to connect to bus: No medium found\n")
+
+    monkeypatch.setattr(service.subprocess, "run", run)
+    with pytest.raises(SystemExit, match="systemctl --user daemon-reload failed: Failed to connect to bus"):
+        service._run("systemctl", "--user", "daemon-reload")
+    assert service._run("systemctl", "--user", "is-active", "x", check=False).returncode == 1
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="install.sh is for macOS and Linux")
+def test_install_sh_on_linux_without_a_compiler_says_what_to_install(tmp_path):
+    import shutil
+    import subprocess
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "uname").write_text("#!/bin/sh\necho Linux\n")
+    (bin_dir / "uname").chmod(0o755)
+    for tool in ("dirname", "grep", "sed", "cat"):
+        (bin_dir / tool).symlink_to(shutil.which(tool))
+    root = Path(__file__).resolve().parent.parent
+    result = subprocess.run(  # noqa: S603 our own install script, fixed arguments
+        ["/bin/sh", str(root / "install.sh")],
+        env={"PATH": str(bin_dir), "HOME": str(tmp_path)},
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 1
+    assert "needs a C and C++ compiler" in result.stderr and "sudo apt install build-essential" in result.stderr

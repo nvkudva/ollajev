@@ -38,3 +38,45 @@ def test_runtime_of_reads_bare_tags_without_fake_filenames():
     assert names.runtime_of("model.onnx") == "ONNX"
     assert names.runtime_of(None) == "PyTorch"
     assert names.runtime_of("weird") == "PyTorch"
+
+
+def test_kev_head_metadata_is_read_without_torch(tmp_path):
+    import collections
+
+    import torch
+
+    from ollajev.adapters import kev
+
+    meta = {
+        "base": "Qwen/Qwen3.5-4B-Base",
+        "base_revision": "a" * 40,
+        "head": collections.OrderedDict(weight=torch.zeros(4, 4, dtype=torch.bfloat16)),
+        "temperature": 1.5,
+        "holdout": ["x"],
+    }
+    head = tmp_path / "head.pt"
+    torch.save(meta, head)
+    read = kev._head_metadata(str(head))
+    assert read["base"] == meta["base"] and read["base_revision"] == meta["base_revision"]
+    assert read["temperature"] == 1.5 and read["head"]["weight"] is None  # tensors are skipped, not loaded
+
+
+def test_kev_head_reader_builds_no_foreign_classes():
+    import io
+    import pickle
+
+    from ollajev.adapters import kev
+
+    payload = pickle.dumps({"base": "x", "evil": io.StringIO()})
+    with pytest.raises(pickle.UnpicklingError):
+        kev._MetadataOnly(io.BytesIO(payload)).load()
+
+
+def test_kev_head_metadata_falls_back_to_torch_for_an_old_style_file(tmp_path):
+    import torch
+
+    from ollajev.adapters import kev
+
+    head = tmp_path / "head.pt"
+    torch.save({"base": "Qwen/Qwen3-0.6B-Base", "head": torch.zeros(2)}, head, _use_new_zipfile_serialization=False)
+    assert kev._head_metadata(str(head))["base"] == "Qwen/Qwen3-0.6B-Base"

@@ -1,4 +1,4 @@
-"""Talking to a running ollajev server over HTTP, for the front ends."""
+"""Talking to a running Ollajev server over HTTP, for the front ends."""
 
 from __future__ import annotations
 
@@ -50,7 +50,7 @@ def server_running() -> bool:
 
 def need_server() -> None:
     if not server_running():
-        raise SystemExit(f"could not connect to ollajev at {server_url()}; start it with: ollajev serve")
+        raise SystemExit(f"could not connect to Ollajev at {server_url()}; start it with: ollajev serve")
 
 
 def url_host(host: str) -> str:

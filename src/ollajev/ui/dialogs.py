@@ -198,7 +198,7 @@ class AddModel(Clickable, ModalScreen[str | None]):
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         event.stop()  # the manager behind this dialog downloads on its own row selection
         if event.row_key.value not in self.supported:
-            self.notify("ollajev has no adapter for this model", severity="warning")
+            self.notify("Ollajev has no adapter for this model", severity="warning")
             return
         self.dismiss(event.row_key.value)
 

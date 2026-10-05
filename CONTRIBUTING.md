@@ -34,7 +34,7 @@ OLLAJEV_HOME=/tmp/ollajev-dev uv run ollajev serve SupersonicLabs/Julia-1 --port
 | Path | What it holds |
 |---|---|
 | `src/ollajev/ui/` | front ends: `cli.py` command line, `repl.py` for `ollajev run`, `tui.py` model manager |
-| `src/ollajev/server/` | HTTP routes: `api.py` Jev API, `admin.py` management API, `static/` demo page |
+| `src/ollajev/server/` | HTTP routes: `api.py` Jev API, `admin.py` management API, `static/` playground page |
 | `src/ollajev/client.py` | talking to a running server, for the front ends |
 | `src/ollajev/manager.py` | loading, unloading and running models |
 | `src/ollajev/store.py`, `names.py` | model names, pinned downloads, trust |

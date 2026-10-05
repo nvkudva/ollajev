@@ -1,4 +1,4 @@
-# Install ollajev as a command on your PATH (Windows).
+# Install Ollajev as a command on your PATH (Windows).
 #
 #   irm https://raw.githubusercontent.com/nvkudva/ollajev/main/install.ps1 | iex
 #   .\install.ps1                  # from a checkout: installs that checkout
@@ -11,7 +11,7 @@ param(
 )
 $ErrorActionPreference = "Stop"
 # Pinned to a release tag, so a piped install never builds an unreviewed branch tip.
-$RepoUrl = "git+https://github.com/nvkudva/ollajev@v0.1.0"
+$RepoUrl = "git+https://github.com/nvkudva/ollajev@v0.2.0"
 
 function Say($msg) { Write-Host "==> $msg" }
 
@@ -36,7 +36,7 @@ if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
   $env:Path = "$env:USERPROFILE\.local\bin;$env:Path"
 }
 
-Say "installing ollajev from $Source (Python 3.12, its own environment)"
+Say "installing Ollajev from $Source (Python 3.12, its own environment)"
 uv tool install --python 3.12 --force $Source
 uv tool update-shell | Out-Null
 

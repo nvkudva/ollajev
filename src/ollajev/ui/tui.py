@@ -9,6 +9,7 @@ import logging
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import threading
@@ -43,7 +44,7 @@ Screen { background: $background; }
 #brand { height: 1; margin: 0 1; padding: 0 1; background: $panel; }
 #brand-name { width: auto; text-style: bold; color: $accent; margin-right: 2; }
 #brand-gap { width: 1fr; }
-#brand Button.menu { width: 14; min-width: 0; padding: 0; content-align: left middle; text-align: left; background: transparent; border: none; }
+#brand Button.menu { width: auto; min-width: 0; padding: 0; content-align: left middle; text-align: left; background: transparent; border: none; }
 #brand Button.menu:focus { background: transparent; text-style: none; }
 #brand Button.menu:hover { background: $primary 40%; }
 #models-panel {
@@ -78,6 +79,9 @@ DataTable > .datatable--hover { background: $boost; }
 #server-panel.stopped { border: round $error 60%; }
 #server-row { height: auto; }
 #server-info { width: 1fr; }
+.card-row.narrow { layout: vertical; }
+.card-row.narrow .buttons { width: 1fr; align-horizontal: left; }
+.card-row.narrow .buttons Button { margin-left: 0; margin-right: 1; }
 #server-panel .buttons { width: auto; margin-top: 0; }
 
 ModalScreen { align: center middle; background: $background 60%; }
@@ -93,7 +97,7 @@ ModalScreen { align: center middle; background: $background 60%; }
 .field Input, .field Select { width: 1fr; margin-bottom: 0; }
 .dialog TextArea { height: 6; margin-bottom: 1; }
 .buttons { height: auto; margin-top: 1; align-horizontal: right; }
-.buttons Button { width: 14; min-width: 0; padding: 0; content-align: left middle; text-align: left; margin-left: 1; background: transparent; border: none; }
+.buttons Button { width: 16; min-width: 0; padding: 0; content-align: left middle; text-align: left; margin-left: 1; background: transparent; border: none; }
 .buttons Button:focus { text-style: bold; background: transparent; }
 .buttons Button:hover { background: $primary 40%; }
 .buttons Button.-primary { color: $accent; text-style: bold; }
@@ -178,8 +182,9 @@ def duration(seconds: float) -> str:
 
 
 def open_terminal(command: list[str]) -> bool:
-    """Run `command` in a new tab of the terminal this app runs in: a tmux window, a WezTerm or iTerm2 tab, else
-    a Terminal window on macOS. False when there is no known way, so the caller can say what to run instead."""
+    """Run `command` in a new tab of the terminal this app runs in: a tmux window; a WezTerm, iTerm2, GNOME Terminal
+    or Konsole tab; else a Terminal window on macOS or an x-terminal-emulator window on Linux. False when there is
+    no known way, so the caller can say what to run instead."""
     line = shlex.join(command)
     program = os.environ.get("TERM_PROGRAM", "")
     if os.environ.get("TMUX"):
@@ -193,6 +198,12 @@ def open_terminal(command: list[str]) -> bool:
         else:
             script = f'tell application "Terminal"\nactivate\ndo script "{quoted}"\nend tell'
         launch = ["osascript", "-e", script]
+    elif os.environ.get("GNOME_TERMINAL_SCREEN") and shutil.which("gnome-terminal"):
+        launch = ["gnome-terminal", "--tab", "--", *command]
+    elif os.environ.get("KONSOLE_VERSION") and shutil.which("konsole"):
+        launch = ["konsole", "--new-tab", "-e", *command]
+    elif shutil.which("x-terminal-emulator"):  # Debian and Ubuntu's default terminal, as a new window
+        launch = ["x-terminal-emulator", "-e", *command]
     else:
         return False
     try:
@@ -233,8 +244,8 @@ class Row(NamedTuple):
 # App actions on the top bar as (key, label, action): these on the left, MENU_END on the right.
 # Actions on one model live in the Selected panel, on the server in the Server panel.
 MENU = [
-    ("n", "Add", "add"),
-    ("/", "Filter", "filter"),
+    ("a", "Add", "add"),
+    ("f", "Filter", "filter"),
 ]
 MENU_END = [
     ("o", "Settings", "options"),
@@ -252,24 +263,25 @@ SELECTION_BUTTONS = [
     ("Info", "info", "default", "i"),
 ]
 SERVER_BUTTONS = [
-    ("Demo", "open_demo", "primary", "w"),
+    ("Playground", "open_playground", "primary", "w"),
     ("Logs", "logs", "default", "l"),
     ("Restart", "restart_server", "default", "R"),
     ("Stop", "stop_server", "error", "S"),
 ]
+CARD_ROW_WIDTH = 125  # a card's text beside up to five 17-column buttons
 DESCRIPTIONS = {entry.name.partition(":")[0]: entry.description for entry in reversed(CATALOG)}
 
 
 class Models(App[bool]):
-    TITLE = "ollajev"
+    TITLE = "Ollajev"
     CSS = CSS
     ENABLE_COMMAND_PALETTE = False  # its main use is picking a theme; the app follows the terminal's instead
     # The status row shows the keys for the cursor row; ? lists them all.
     BINDINGS: ClassVar = [
         Binding("d", "set_default", "Default"),
         Binding("i", "info", "Info"),
-        Binding("n", "add", "Add"),
-        Binding("slash", "filter", "Filter"),
+        Binding("a", "add", "Add"),
+        Binding("f", "filter", "Filter"),
         Binding("question_mark", "help", "Help"),
         Binding("q", "quit_app", "Quit"),
         Binding("p", "pull", "Pull", show=False),
@@ -278,10 +290,10 @@ class Models(App[bool]):
         Binding("R", "restart_server", "Restart", show=False),
         Binding("S", "stop_server", "Stop", show=False),
         Binding("u", "unload", "Unload", show=False),
-        Binding("a", "alias", "Alias", show=False),
+        Binding("c", "alias", "Alias", show=False),
         Binding("o", "options", "Options", show=False),
         Binding("b", "service", "Service", show=False),
-        Binding("w", "open_demo", "Demo", show=False),
+        Binding("w", "open_playground", "Playground", show=False),
         Binding("l", "logs", "Logs", show=False),
         Binding("ctrl+r", "reload_list", "Refresh", show=False),
         Binding("e", "last_error", "Error", show=False),
@@ -293,7 +305,7 @@ class Models(App[bool]):
         self.names: list[str] = []
         self.rows: dict[str, Row] = {}  # model name -> its row as listed
         self.summary = ""  # the idle status line: disk use and filter
-        self.filter_text = ""  # `/` shows only the models whose name contains it
+        self.filter_text = ""  # `f` shows only the models whose name contains it
         self.fetching_quants = False
         self.busy = False
         self.cancel = threading.Event()  # set by Esc; a download in progress stops at its next update
@@ -314,7 +326,7 @@ class Models(App[bool]):
 
     def compose(self) -> ComposeResult:
         with Horizontal(id="brand"):
-            yield Static("🦒 ollajev", id="brand-name")
+            yield Static("🦒 Ollajev", id="brand-name")
             for key, text, action in MENU:
                 yield self.menu_item(key, text, action)
             yield Static(id="brand-gap")
@@ -326,12 +338,12 @@ class Models(App[bool]):
             yield Static("", id="empty")
         with Vertical(id="selection-panel") as selection_panel:
             selection_panel.border_title = "Selected"
-            with Horizontal(id="selection-row"):
+            with Horizontal(id="selection-row", classes="card-row"):
                 yield Static("", id="selection-info")
                 yield dialogs.buttons(*SELECTION_BUTTONS)
         with Vertical(id="server-panel") as server_panel:
             server_panel.border_title = "Server"
-            with Horizontal(id="server-row"):
+            with Horizontal(id="server-row", classes="card-row"):
                 yield Static("", id="server-info")
                 yield dialogs.buttons(*SERVER_BUTTONS)
         with Horizontal(id="status-row"):
@@ -357,6 +369,16 @@ class Models(App[bool]):
         self.load_quants()
         self.load_downloads()
         self.set_interval(3, self.auto_refresh)
+        self.fit_cards()
+
+    def on_resize(self) -> None:
+        self.fit_cards()
+
+    def fit_cards(self) -> None:
+        """Below CARD_ROW_WIDTH columns a card's buttons go under its text instead of squeezing it beside them."""
+        narrow = self.size.width < CARD_ROW_WIDTH
+        for row in self.query(".card-row"):
+            row.set_class(narrow, "narrow")
 
     def colour(self, role: str) -> str:
         """A colour of the current theme (success, warning, error, accent…) as a Rich colour: one of the terminal's
@@ -421,7 +443,7 @@ class Models(App[bool]):
                 keys += [("s", "serve")]
                 if name in loaded:
                     keys += [("u", "unload")]
-                keys += [("a", "short name"), ("x", "delete")]
+                keys += [("c", "short name"), ("x", "delete")]
             keys += [("i", "info")]
         if self.filter_text:
             keys += [("esc", "clear filter")]
@@ -520,9 +542,9 @@ class Models(App[bool]):
         empty = self.query_one("#empty", Static)
         empty.display = not rows
         if self.filter_text:
-            empty.update(f"No models match '{self.filter_text}'  ·  / to change it, esc to clear it")
+            empty.update(f"No models match '{self.filter_text}'  ·  f to change it, esc to clear it")
         else:
-            empty.update("No models yet  ·  n adds one from Hugging Face")
+            empty.update("No models yet  ·  a adds one from Hugging Face")
         if keep in self.names:
             table.move_cursor(row=self.names.index(keep))
         self.show_server_panel(server_up, loaded)
@@ -682,7 +704,7 @@ class Models(App[bool]):
 
     @work
     async def action_filter(self) -> None:
-        """`/`: show only matching models; an empty filter shows them all again."""
+        """`f`: show only matching models; an empty filter shows them all again."""
         text = await self.push_screen_wait(dialogs.Prompt("Filter models", "part of a name; empty shows all"))
         self.filter_text = text or ""
         self.reload()
@@ -1012,7 +1034,7 @@ class Models(App[bool]):
                 if await self.push_screen_wait(dialogs.Confirm("Background service", "Stop and remove it?")):
                     self.notify(await asyncio.to_thread(service.uninstall))
             elif await self.push_screen_wait(
-                dialogs.Confirm("Background service", "Run ollajev in the background at login?", default=True)
+                dialogs.Confirm("Background service", "Run Ollajev in the background at login?", default=True)
             ):
                 self.notify(await asyncio.to_thread(service.install))
         except SystemExit as exc:
@@ -1087,12 +1109,12 @@ class Models(App[bool]):
         if not open_terminal(command):
             self.notify(f"Run in another terminal: {shlex.join(command)}", timeout=15)
 
-    def action_open_demo(self) -> None:
-        """Open the demo page of the running server in the browser."""
+    def action_open_playground(self) -> None:
+        """Open the playground page of the running server in the browser."""
         if not client.server_running():
             self.notify("Start the server first (s, or Serve on a model)", severity="warning")
             return
-        webbrowser.open(f"{client.server_url()}/demo")
+        webbrowser.open(f"{client.server_url()}/playground")
 
     def show_server_panel(self, server_up: bool, loaded: set[str]) -> None:
         """The Server panel: shown while a server runs or this window's server starts or has stopped."""
@@ -1104,7 +1126,7 @@ class Models(App[bool]):
         panel.set_class(crashed, "stopped")
         for button_id in ("#do-stop_server", "#do-restart_server"):
             self.query_one(button_id).display = ours
-        self.query_one("#do-open_demo").display = server_up
+        self.query_one("#do-open_playground").display = server_up
         url = client.server_url()
         log_file = str(config.log_dir() / "server.log").replace(str(Path.home()), "~", 1)
         info = Text()
@@ -1159,8 +1181,8 @@ KEYS: list[tuple[str, list[tuple[str, str, str]]]] = [
             ("i", "family, commit, limits, path", "show"),
             ("u", "unload it from memory", "stop"),
             ("x", "delete the download from disk", "rm"),
-            ("a", "give it a short name", "cp"),
-            ("n", "add any Hugging Face repo by name", "pull"),
+            ("c", "give it a short name", "cp"),
+            ("a", "add any Hugging Face repo by name", "pull"),
         ],
     ),
     (
@@ -1169,7 +1191,7 @@ KEYS: list[tuple[str, list[tuple[str, str, str]]]] = [
             ("s", "serve the selected model: it becomes the default, the server starts or restarts", "serve"),
             ("R", "restart the server", ""),
             ("S", "stop the server", ""),
-            ("w", "open the demo page in the browser", ""),
+            ("w", "open the playground in the browser", ""),
             ("l", "follow the server logs in a new terminal tab", ""),
             ("o", "settings: device, address, port, memory", ""),
             ("b", "install or remove the background service", "service"),
@@ -1178,7 +1200,7 @@ KEYS: list[tuple[str, list[tuple[str, str, str]]]] = [
     (
         "App",
         [
-            ("/", "filter the list by name; esc clears the filter", ""),
+            ("f", "filter the list by name; esc clears the filter", ""),
             ("ctrl+r", "refresh the list", ""),
             ("e", "the last error in full", ""),
             ("esc", "cancel a running download first, else clear the filter", ""),

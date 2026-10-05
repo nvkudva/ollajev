@@ -1,4 +1,4 @@
-ollajev
+Ollajev
 Copyright 2026 Vijay Krishna Kudva
 
 This product includes software developed by Jared Palmer as part of kev
@@ -6,8 +6,8 @@ This product includes software developed by Jared Palmer as part of kev
 Files: src/ollajev/_vendor/kev/ (from commit 90512f1c517d977741f2104470a40635408236c9;
 see src/ollajev/_vendor/kev/VENDORED.md for local changes).
 
-The demo page in src/ollajev/server/static/ is adapted from laya-server
+The playground page in src/ollajev/server/static/ is adapted from laya-server
 (https://github.com/nvkudva/laya-server), Apache License 2.0.
 
-ollajev is not affiliated with or endorsed by Ollama or TypeSafe. Model weights are downloaded
+Ollajev is not affiliated with or endorsed by Ollama or TypeSafe. Model weights are downloaded
 from Hugging Face under each model's own license.

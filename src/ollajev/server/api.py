@@ -1,4 +1,4 @@
-"""Jev-compatible (TypeSafe System One) HTTP API, plus the demo page and the Ollama-style admin API."""
+"""Jev-compatible (TypeSafe System One) HTTP API, plus the playground page and the Ollama-style admin API."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Annotated, Any, Literal
 
 from fastapi import Body, FastAPI, Request, Response
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -100,11 +100,11 @@ def configure(
     allowed_hosts = allowed
 
 
-DEMO_CSP = (
+PLAYGROUND_CSP = (
     "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
     "object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
 )
-OPEN_PATHS = ("/", "/demo", "/static/")  # the health probe and the demo page need no key
+OPEN_PATHS = ("/", "/playground", "/demo", "/static/")  # the health probe and the playground page need no key
 
 log = logging.getLogger(__name__)
 
@@ -113,7 +113,7 @@ try:
 except PackageNotFoundError:  # running from a source tree that was never installed
     _version = "0+unknown"
 
-app = FastAPI(title="ollajev", version=_version, lifespan=lifespan)
+app = FastAPI(title="Ollajev", version=_version, lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
@@ -170,13 +170,21 @@ async def health() -> dict[str, Any]:
         "status": "ok",
         "default_model": default_model(),
         "loaded": [s.name for s in current_manager().loaded()],
-        "ui": "/demo",
+        "ui": "/playground",
     }
 
 
+@app.get("/playground")
+async def playground() -> FileResponse:
+    return FileResponse(
+        STATIC_DIR / "playground.html", media_type="text/html", headers={"content-security-policy": PLAYGROUND_CSP}
+    )
+
+
 @app.get("/demo")
-async def demo() -> FileResponse:
-    return FileResponse(STATIC_DIR / "demo.html", media_type="text/html", headers={"content-security-policy": DEMO_CSP})
+async def demo() -> RedirectResponse:
+    """The playground's old address, kept so earlier links and bookmarks still open it."""
+    return RedirectResponse("/playground", status_code=308)
 
 
 @app.get("/ui/presets")

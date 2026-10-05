@@ -1,6 +1,6 @@
-<p align="center"><img src="assets/logo.png" alt="ollajev giraffe logo" width="140"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/nvkudva/ollajev/main/assets/logo.png" alt="Ollajev giraffe logo" width="140"></p>
 
-# ollajev
+# Ollajev
 
 > **Run Jev-style decision models on your machine.** Pull a System One model from Hugging Face and
 > call it through the same `/v1/systemone` API as TypeSafe's hosted Jev.
@@ -20,7 +20,7 @@ A local server that runs **System One decision models** from Hugging Face behind
 - Pick a model with the request's `model` field. Models load on first use and unload when idle.
 - One command line to manage models: `serve`, `setup`, `run`, `pull`, `list`, `ps`, `show`, `rm`, `stop`, `cp`, `service` (see [Commands](#commands)).
 
-ollajev is an independent project. It is not affiliated with or endorsed by Ollama or TypeSafe.
+Ollajev is an independent project. It is not affiliated with or endorsed by Ollama or TypeSafe.
 
 ## Install
 
@@ -40,7 +40,12 @@ irm https://raw.githubusercontent.com/nvkudva/ollajev/main/install.ps1 | iex
   as a command in its own Python 3.12 environment (`uv tool install`).
 - Add `--service` (`… | sh -s -- --service`) to also run the server in the background at every
   login: a launchd agent on macOS, a systemd user unit on Linux.
-- Already have uv? `uv tool install git+https://github.com/nvkudva/ollajev` does the same.
+- On Linux, llama.cpp is compiled during the install, so a C and C++ compiler must be present:
+  `sudo apt install build-essential` on Debian and Ubuntu, `sudo dnf install gcc gcc-c++` on Fedora.
+  The script checks and says so. Linux gets the CPU build of PyTorch; for an NVIDIA GPU, see `pyproject.toml`.
+- Already have uv? `uv tool install ollajev` installs it from PyPI. On Linux, add
+  `--index https://download.pytorch.org/whl/cpu`; without it PyPI's PyTorch brings the CUDA libraries,
+  several GB. The script above takes the CPU build by itself.
 - To remove it, see [Uninstall](#uninstall).
 
 ## Uninstall
@@ -78,11 +83,13 @@ ollajev            # first run: opens the model manager; pick a model, press Ent
 ollajev run        # in another terminal: ask the model questions
 ```
 
-- The model manager lists the curated models, and `n` searches Hugging Face for any other. Run
+- The model manager lists the curated models, and `a` searches Hugging Face for any other. Run
   `ollajev setup` (or `ollajev tui`) to open it again.
-- The demo page opens at <http://127.0.0.1:8000/demo>.
+- The playground opens at <http://127.0.0.1:8000/playground>. It lets you play with requests: pick
+  any downloaded model, load an example or write your own state and questions, send it, and compare
+  the answers across models in the log. `w` in the model manager opens it too.
 
-![The ollajev model manager: a list of decision models with their status, size, runtime and language, and a Selected panel with Serve, Delete and Info buttons](assets/model-manager.png)
+![The Ollajev model manager: a list of decision models with their status, size, runtime and language, and a Selected panel with Serve, Delete and Info buttons](https://raw.githubusercontent.com/nvkudva/ollajev/main/assets/model-manager.png)
 
 ## Example
 
@@ -200,7 +207,7 @@ OLLAJEV_API_KEY=$(openssl rand -hex 24) OLLAJEV_HOST=0.0.0.0:8000 ollajev serve
 export TYPESAFE_API_KEY=<the same key>
 ```
 
-With a key set, `/v1/*` and `/api/*` need `Authorization: Bearer <key>`; the `/demo` page cannot
+With a key set, `/v1/*` and `/api/*` need `Authorization: Bearer <key>`; the playground cannot
 send one, so use it without a key. Put TLS in front (a reverse proxy) before exposing it beyond a LAN.
 
 ## Commands
@@ -209,7 +216,7 @@ Run `ollajev <command> --help` for options and an example.
 
 ### Model manager
 
-`ollajev setup` opens one screen for the model commands. Move with the arrow keys or the mouse. The Selected panel under the list shows the model at the cursor and buttons for what applies to it: Download for a model not on disk yet, then Serve, Default, Unload and Delete, and Info. The status row at the bottom lists the keys for that model. The menu bar at the top (Add, Filter, Settings, Quit) can be clicked or used with its keys. Every button shows its key in brackets before its label. Serve starts the server right there: a Server panel shows its address and model, with Demo, Logs, Restart and Stop; quitting the manager stops it. Logs follows the server log in a new terminal tab. The buttons in every dialog can be clicked too. The keys:
+`ollajev setup` opens one screen for the model commands. Move with the arrow keys or the mouse. The Selected panel under the list shows the model at the cursor and buttons for what applies to it: Download for a model not on disk yet, then Serve, Default, Unload and Delete, and Info. The status row at the bottom lists the keys for that model. The menu bar at the top (Add, Filter, Settings, Quit) can be clicked or used with its keys. Every button shows its key in brackets before its label. Serve starts the server right there: a Server panel shows its address and model, with Playground, Logs, Restart and Stop; quitting the manager stops it. Logs follows the server log in a new terminal tab. The buttons in every dialog can be clicked too. The keys:
 
 | Key | Same as | What it does |
 |---|---|---|
@@ -218,17 +225,17 @@ Run `ollajev <command> --help` for options and an example.
 | `p` | `pull` | download only |
 | `u` | `stop` | unload it from memory |
 | `x` | `rm` | delete the download |
-| `a` | `cp` | give it a short name |
+| `c` | `cp` | give it a short name |
 | `i` | `show` | family, commit, limits, path |
-| `n` | `pull` | add any Hugging Face repo by name |
-| `w` | | open the demo page of the running server |
+| `a` | `pull` | add any Hugging Face repo by name |
+| `w` | | open the playground of the running server |
 | `l` | | follow the server logs in a new terminal tab |
 | `o` | | settings: device, address, port, how long an idle model stays loaded, models in memory; saved in `~/.ollajev/config.json` |
 | `b` | `service` | install or remove the background service |
 | `s` | `serve` | serve the selected model: it becomes the default, and the server starts or restarts with it |
 | `R` | | restart the server |
 | `S` | | stop the server |
-| `/` | | filter the list by name |
+| `f` | | filter the list by name |
 | Ctrl+R | | refresh the list |
 | `e` | | the last error in full |
 | Esc | | cancel a download |
@@ -281,8 +288,12 @@ q3>
 - **Model management:** `GET /api/tags`, `GET /api/ps`, `POST /api/pull`
   (`{"model", "stream"}`, NDJSON progress), `POST /api/show`, `DELETE /api/delete`,
   `POST /api/copy`, `POST /api/stop`.
-- **Demo page:** `/demo` — a request editor with a model picker, five ready-made examples and a log
-  of answers. `/ui/presets` serves the examples.
+- **Playground:** `/playground` lets you play with requests on different models. Pick any downloaded
+  model, start from one of five ready-made examples or write your own state and `noul`, `choice` and
+  `score` questions, edit them as a form or as JSON, and send. Each answer lands in a log with its
+  probabilities, confidence and timing, so you can rerun the same request on another model and compare.
+  It shows each model's limits and copies any request as a `curl` command. `/ui/presets` serves the
+  examples; the old `/demo` address redirects here.
 
 Every error is `{"detail": [{"loc", "msg", "type"}]}`: 404 `model_not_found`, 403
 `model_not_trusted`, 422 for an invalid request or one over the model's limits.
@@ -334,9 +345,9 @@ uv run pytest
 
 ## How it compares to Ollama
 
-ollajev follows Ollama's workflow (pull, list, run, serve) for a different kind of model.
+Ollajev follows Ollama's workflow (pull, list, run, serve) for a different kind of model.
 
-| | Ollama | ollajev |
+| | Ollama | Ollajev |
 |---|---|---|
 | Runs | chat and text-generation LLMs | System One decision models (Jev-style) |
 | Answers with | generated text | probabilities for typed questions, one forward pass |

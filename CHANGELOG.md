@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-05
+
+First release on PyPI: `uv tool install ollajev`.
+
 ### Security
 
 - `POST /api/pull` no longer accepts `trust`; trusting a repo's Python code is CLI-only.
@@ -17,8 +21,17 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
-- `ollajev setup` (alias `tui`) is now a model manager: download, switch the default, ask, unload, delete,
-  alias, inspect and serve from one screen. It no longer shows buttons and form fields.
+- The demo page is now the playground, at `/playground`; `/demo` redirects there. The model manager's
+  button and the server banner say Playground.
+- `ollajev setup` (alias `tui`) is now a model manager: download, switch the default, unload, delete,
+  alias, inspect and serve from one screen. A Selected card shows the model at the cursor with buttons for
+  what applies to it, a Server card shows the running server with Playground, Logs, Restart and Stop, and the
+  status row lists the keys. Every button shows its key as `[key] label`. Ask is hidden for now.
+- The model manager uses the terminal's own colours and has no theme picker.
+- Keys: `a` adds a model, `f` filters, `c` gives a short name, `s` serves the selected model, `R` restarts
+  and `S` stops the server, `l` follows the server logs in a new terminal tab.
+- The model manager starts faster: listing downloads no longer imports PyTorch.
+- The playground opens on the model the server has loaded.
 
 - Config and logs now live in `~/.ollajev` (override with `OLLAJEV_HOME`). A config in the old OS
   folder is read once and moved on the next save.
@@ -27,6 +40,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- `install.sh` checks for a C and C++ compiler on Linux, which llama.cpp needs, and says how to install one.
+- A failing `systemctl` or `launchctl` call in `ollajev service` ends with its message, not a traceback.
 - Config writes are locked and atomic; a corrupt `config.json` is moved to `config.json.bad`.
 - A request can no longer run on a model the reaper just unloaded; eviction reads the slot table
   under its lock.

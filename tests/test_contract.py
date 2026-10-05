@@ -414,6 +414,24 @@ def test_ipv6_is_skipped_when_it_does_not_connect(monkeypatch):
     assert store._ipv6_reaches("huggingface.co") is True
 
 
+def test_ipv6_probe_connects_to_the_first_address_host_and_port(monkeypatch):
+    import contextlib
+    import socket
+
+    tried = []
+
+    def connect(address, timeout):
+        tried.append(address)
+        return contextlib.nullcontext()
+
+    monkeypatch.setattr(
+        socket, "getaddrinfo", lambda *a, **k: [(socket.AF_INET6, 1, 6, "", ("2001:db8::1", 443, 0, 0))]
+    )
+    monkeypatch.setattr(socket, "create_connection", connect)
+    assert store._ipv6_reaches("huggingface.co") is True
+    assert tried == [("2001:db8::1", 443)]
+
+
 def test_saved_settings_apply_unless_the_environment_overrides(tmp_path, monkeypatch):
     from ollajev import config
 

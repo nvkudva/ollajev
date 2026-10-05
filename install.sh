@@ -1,5 +1,5 @@
 #!/bin/sh
-# Install ollajev as a command on your PATH, optionally as a background service.
+# Install Ollajev as a command on your PATH, optionally as a background service.
 #
 #   curl -fsSL https://raw.githubusercontent.com/nvkudva/ollajev/main/install.sh | sh
 #   curl -fsSL https://raw.githubusercontent.com/nvkudva/ollajev/main/install.sh | sh -s -- --service
@@ -13,7 +13,7 @@
 set -eu
 
 # Pinned to a release tag, so a piped install never builds an unreviewed branch tip.
-REPO_URL="git+https://github.com/nvkudva/ollajev@v0.1.0"
+REPO_URL="git+https://github.com/nvkudva/ollajev@v0.2.0"
 SERVICE=0
 UNINSTALL=0
 SOURCE=""
@@ -38,7 +38,7 @@ if [ "$UNINSTALL" = 1 ]; then
     ollajev service uninstall >/dev/null 2>&1 || true
   fi
   if command -v uv >/dev/null 2>&1; then
-    uv tool uninstall ollajev >/dev/null 2>&1 && say "removed the ollajev command" || say "ollajev was not installed"
+    uv tool uninstall ollajev >/dev/null 2>&1 && say "removed the ollajev command" || say "Ollajev was not installed"
   fi
   say "kept your config and downloaded models; delete them by hand if you want the space back:"
   echo "    config  ~/.ollajev"
@@ -56,13 +56,26 @@ if [ -z "$SOURCE" ]; then
   fi
 fi
 
+# Linux has no prebuilt llama-cpp-python wheel, so it is compiled during the install.
+if [ "$(uname -s)" = Linux ] && ! { command -v cc >/dev/null 2>&1 && command -v c++ >/dev/null 2>&1; }; then
+  echo "Ollajev needs a C and C++ compiler on Linux to build llama.cpp. Install one, then run this again:" >&2
+  echo "    Debian, Ubuntu:  sudo apt install build-essential" >&2
+  echo "    Fedora:          sudo dnf install gcc gcc-c++" >&2
+  echo "    Arch:            sudo pacman -S base-devel" >&2
+  exit 1
+fi
+
 if ! command -v uv >/dev/null 2>&1; then
   say "installing uv (https://docs.astral.sh/uv/)"
-  curl -LsSf https://astral.sh/uv/install.sh | sh
+  if command -v curl >/dev/null 2>&1; then
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+  else
+    wget -qO- https://astral.sh/uv/install.sh | sh
+  fi
   command -v uv >/dev/null 2>&1 || { echo "uv install failed; see https://docs.astral.sh/uv/" >&2; exit 1; }
 fi
 
-say "installing ollajev from $SOURCE (Python 3.12, its own environment)"
+say "installing Ollajev from $SOURCE (Python 3.12, its own environment)"
 uv tool install --python 3.12 --force "$SOURCE"
 
 case ":$PATH:" in

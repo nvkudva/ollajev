@@ -16,4 +16,4 @@ Expect an acknowledgement within 7 days and a status update within 30 days. This
 - **DNS rebinding.** On loopback, requests are checked against a `Host` header allow-list.
 - **Trust is never remote.** The HTTP API cannot mark a repo trusted. Trust is set only from the CLI, interactively or with `--trust`, and is keyed to `repo@commit sha`, so a new commit needs new trust.
 - **Model code runs unsandboxed.** The families Julia, open-jev, Intern and Decision-1 import Python from the model repo (`trust_remote_code` / `sys.path`) in the server process, with your privileges and no sandbox. Only trust repos and commits you have reviewed.
-- **Demo page.** The built-in demo page does not work when an API key is set.
+- **Playground page.** The built-in playground page does not work when an API key is set.

@@ -170,8 +170,13 @@ def test_oversized_body_is_413(client, monkeypatch):
     assert out.json()["detail"][0]["type"] == "payload_too_large"
 
 
-def test_demo_page_sends_a_csp(client):
-    assert "default-src 'self'" in client.get("/demo").headers["content-security-policy"]
+def test_playground_page_sends_a_csp(client):
+    assert "default-src 'self'" in client.get("/playground").headers["content-security-policy"]
+
+
+def test_the_old_demo_address_redirects_to_the_playground(client):
+    reply = client.get("/demo", follow_redirects=False)
+    assert reply.status_code == 308 and reply.headers["location"] == "/playground"
 
 
 @pytest.mark.parametrize(

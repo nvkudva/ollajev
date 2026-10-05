@@ -1,4 +1,4 @@
-"""Ready-made requests for the demo page: a sample state plus a question set that exercises it.
+"""Ready-made requests for the playground page: a sample state plus a question set that exercises it.
 
 Kept inside every phase 1 model's limits: at most 6 options or levels per question (Julia takes 20)
 and short enough for open-jev's 512 tokens.
@@ -105,7 +105,7 @@ EXAMPLES: dict[str, dict[str, Any]] = {
         },
     },
     "email": {
-        # A string, not a JSON object: the demo's state box is a textarea.
+        # A string, not a JSON object: the playground's state box is a textarea.
         "state": (
             "From: accounts@northwind.example\nSubject: Invoice INV-2291 shows the wrong plan\n\n"
             "Hi, the invoice for March shows the annual plan, but we moved to monthly in February. "

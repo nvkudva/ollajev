@@ -6,8 +6,12 @@ The base model is fetched at the revision head.pt names.
 
 from __future__ import annotations
 
+import collections
 import functools
+import io
 import os
+import pickle
+import zipfile
 from typing import Any
 
 from .base import Loaded
@@ -16,12 +20,45 @@ LIMITS = {"max_options": 255, "max_levels": 10, "max_tokens": 8192}
 BASE_FILES = ["*.json", "*.safetensors", "*.txt", "*.jinja", "tokenizer*", "merges.txt", "vocab.json"]
 
 
+def _skip(*args: Any, **kwargs: Any) -> None:
+    return None
+
+
+class _MetadataOnly(pickle.Unpickler):
+    """Reads a torch.save file's pickle without torch: tensors and storages come back as None, and only plain
+    containers can be built, so nothing in the file runs."""
+
+    def find_class(self, module: str, name: str) -> Any:
+        if (module, name) == ("collections", "OrderedDict"):
+            return collections.OrderedDict
+        if module == "torch" or module.startswith("torch."):
+            return _skip
+        raise pickle.UnpicklingError(f"unexpected {module}.{name}")
+
+    def persistent_load(self, pid: Any) -> None:
+        return None
+
+
+def _head_metadata(head: str) -> dict[str, Any]:
+    """head.pt's metadata. Read without importing torch, which costs most of a second on every listing of the
+    downloads; torch.load only for a file this reader does not understand."""
+    try:
+        with zipfile.ZipFile(head) as archive:
+            pickled = next(name for name in archive.namelist() if name.endswith("data.pkl"))
+            meta = _MetadataOnly(io.BytesIO(archive.read(pickled))).load()
+        if isinstance(meta, dict) and isinstance(meta.get("base"), str):
+            return meta
+    except (zipfile.BadZipFile, StopIteration, pickle.UnpicklingError, EOFError, ValueError, TypeError):
+        pass
+    import torch
+
+    return torch.load(head, map_location="cpu", weights_only=True)
+
+
 @functools.lru_cache(maxsize=32)
 def _base(head: str) -> list[tuple[str, str | None, list[str]]]:
     """The base repo head.pt names, with the revision and the files it needs. Cached: the path carries its commit."""
-    import torch
-
-    meta = torch.load(head, map_location="cpu", weights_only=True)
+    meta = _head_metadata(head)
     return [(meta["base"], meta.get("base_revision"), BASE_FILES)]
 
 

@@ -49,7 +49,7 @@ def plist(exe: str, log_dir: Path) -> str:
 
 def unit(exe: str) -> str:
     return f"""[Unit]
-Description=ollajev System One decision model server
+Description=Ollajev System One decision model server
 After=network-online.target
 
 [Service]
@@ -71,7 +71,13 @@ def _unit_path() -> Path:
 
 
 def _run(*cmd: str, check: bool = True) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(cmd, check=check, capture_output=True, text=True)
+    """Run a launchctl or systemctl command. With `check`, a failure ends with its own message rather than a
+    traceback: e.g. `systemctl --user` in a container or SSH session with no user bus."""
+    result = subprocess.run(cmd, check=False, capture_output=True, text=True)
+    if check and result.returncode != 0:
+        detail = (result.stderr or result.stdout).strip() or f"exit code {result.returncode}"
+        raise SystemExit(f"{' '.join(cmd)} failed: {detail}")
+    return result
 
 
 def _unsupported() -> SystemExit:

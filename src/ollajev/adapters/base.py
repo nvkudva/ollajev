@@ -9,7 +9,7 @@ class Adapter(Protocol):
     name: str
     description: str
     released: str | None
-    limits: dict[str, Any]  # max_options, max_levels, max_tokens, languages: shown by `show` and the demo
+    limits: dict[str, Any]  # max_options, max_levels, max_tokens, languages: shown by `show` and the playground
 
     def system_one(self, state: Any, questions: dict[str, dict[str, Any]]) -> dict[str, Any]:
         """Answer every question about `state`.

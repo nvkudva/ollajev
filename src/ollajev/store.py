@@ -41,7 +41,8 @@ def _ipv6_reaches(host: str) -> bool:
     except OSError:
         return True
     try:
-        with socket.create_connection(addresses[0][4][:2], timeout=IPV6_PROBE_SECONDS):
+        address = addresses[0][4]
+        with socket.create_connection((str(address[0]), int(address[1])), timeout=IPV6_PROBE_SECONDS):
             return True
     except OSError:
         return False
@@ -499,7 +500,8 @@ def download(resolved: Resolved, cancel: threading.Event | None = None) -> str:
 def prefetch(resolved: Resolved, cancel: threading.Event | None = None) -> None:
     """Fetch the extra files some families need beyond the repo (kev's base model); see needs_prefetch.
     Setting `cancel` aborts it with Cancelled."""
-    resolved.family.prefetch(local_path(resolved), tqdm_class=_cancellable(cancel))
+    family: Any = resolved.family  # prefetch is optional on a family; needs_prefetch checks for it
+    family.prefetch(local_path(resolved), tqdm_class=_cancellable(cancel))
 
 
 def needs_prefetch(resolved: Resolved) -> bool:
