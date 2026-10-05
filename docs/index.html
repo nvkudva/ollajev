@@ -223,9 +223,11 @@ footer .end { margin-left: auto; max-width: 46ch; }
 
 /* ---------- Screenshots ---------- */
 .shot { margin: 0; }
-.shot img { display: block; width: 100%; height: auto; border-radius: 14px; border: 1.5px solid var(--ink); background: #2b2b2b; }
+.shot img { display: block; width: 100%; height: auto; border-radius: 14px; border: 1.5px solid var(--ink); background: #e9e9ec; }
 .shot figcaption { font-size: 14.5px; color: var(--muted); margin-top: 12px; max-width: 70ch; }
 .hero .shot { margin-top: 56px; }
+.video { margin: 0; }
+.video video { display: block; width: 100%; height: auto; border-radius: 14px; border: 1.5px solid var(--ink); background: #f7f8fd; }
 
 /* ---------- Model manager ---------- */
 .flow kbd { margin-right: 8px; vertical-align: 2px; }
@@ -356,11 +358,18 @@ const INSTALL = {
 const SHOTS = {
   models: {
     src: "tui-models.png",
-    alt: "The Ollajev model manager in a dark terminal: a list of 28 curated decision models, each with a status of default, downloaded or available, its size, runtime (llama.cpp or PyTorch) and language. Below it, a Selected panel for Mapika/decider-4b-GGUF:Q4_K_M, the default, with [s] Serve, [x] Delete and [i] Info buttons.",
+    width: 1600, height: 1003,
+    alt: "The Ollajev model manager in a light terminal: a list of curated decision models, each with a status of default, downloaded or available, its size, runtime (llama.cpp or PyTorch) and language. Below it, a Selected panel for Mapika/decider-4b-GGUF:Q4_K_M with [s] Serve, [d] Default, [x] Delete and [i] Info buttons.",
   },
   search: {
     src: "tui-search.png",
-    alt: "The Add a model from Hugging Face dialog after typing jev: 25 models and 81 files with size, download count and runtime. Rows marked with a cross are unsupported and cannot run.",
+    width: 1600, height: 1003,
+    alt: "The Add a model from Hugging Face dialog after typing jev: 25 models and 101 files with size, download count and runtime. Rows marked with a cross are unsupported and cannot run.",
+  },
+  playground: {
+    src: "playground.png",
+    width: 1600, height: 1000,
+    alt: "The Ollajev playground in a browser: a model picker set to SupersonicLabs/Julia-1, a request editor with a state and three typed questions, and a conversation log with two requests answered by different models, each with probability bars.",
   },
 };
 
@@ -429,7 +438,7 @@ const QUESTION_TYPES = [
   ["score", "Rate on a scale", "The expected level on an ordered rubric, with a probability per level."],
 ];
 
-const NAV_LINKS = [["#manager", "Model manager"], ["#start", "Quick start"], ["#commands", "Commands"], ["#how", "Decision models"], ["#models", "Models"]];
+const NAV_LINKS = [["#video", "Video"], ["#manager", "Model manager"], ["#start", "Quick start"], ["#commands", "Commands"], ["#how", "Decision models"], ["#playground", "Playground"], ["#models", "Models"]];
 
 /* =========================================================
    2. Small primitives
@@ -504,7 +513,7 @@ function Section({ id, title, lede, className = "", children }) {
 
 function Screenshot({ shot, caption, lazy = false }) {
   return html`<figure class="shot">
-    <img src=${shot.src} alt=${shot.alt} width="1600" height="1003" loading=${lazy ? "lazy" : "eager"} decoding="async" />
+    <img src=${shot.src} alt=${shot.alt} width=${shot.width} height=${shot.height} loading=${lazy ? "lazy" : "eager"} decoding="async" />
     ${caption ? html`<figcaption>${caption}</figcaption>` : null}
   </figure>`;
 }
@@ -560,8 +569,17 @@ function Hero() {
     </div>
     <${Screenshot} shot=${SHOTS.models}
       caption=${html`The model manager, opened with <code>ollajev setup</code>. Pick a model, press <kbd>Enter</kbd> to download it, then <kbd>s</kbd> to serve.`} />
-  </div></section>
-  <!-- LAUNCH VIDEO -->`;
+  </div></section>`;
+}
+
+function LaunchVideo() {
+  return html`<${Section} id="video" title="See it in under a minute."
+    lede="The model manager, the Ollama-style commands, five models answering one request, and the playground. Silent, so it plays fine muted.">
+    <figure class="video">
+      <video src="launch.mp4" poster="launch-poster.jpg" controls muted playsinline preload="none" width="1920" height="1080"
+        aria-label="Ollajev launch video, 53 seconds, no sound"></video>
+    </figure>
+  <//>`;
 }
 
 function ManagerFlow() {
@@ -733,6 +751,14 @@ function Demo() {
   <//>`;
 }
 
+function Playground() {
+  return html`<${Section} id="playground" title="A playground in every server."
+    lede=${html`<code>ollajev serve</code> opens <code>/playground</code> in your browser. Load a sample question set or type your own, pick any downloaded model, send, then switch models and compare the answers.`}>
+    <${Screenshot} shot=${SHOTS.playground} lazy
+      caption="Two requests on the same question set: decider-4b first, then Julia-1, each with its probability bars and timings." />
+  <//>`;
+}
+
 function DropIn() {
   return html`<section class="band dropin" aria-labelledby="dropin-title"><div class="wrap dropin-grid">
     <div>
@@ -829,11 +855,13 @@ function App() {
     <${Nav} theme=${theme} setTheme=${setTheme} />
     <main id="main">
       <${Hero} />
+      <${LaunchVideo} />
       <${ModelManager} />
       <${QuickStart} />
       <${Commands} />
       <${HowItWorks} />
       <${Demo} />
+      <${Playground} />
       <${DropIn} />
       <${Models} />
     </main>

@@ -7,6 +7,9 @@
 
 **[Product page](https://nvkudva.github.io/ollajev/)** · [Install](#install) · [Quick start](#quick-start) · [Models](#models) · [API](#api)
 
+<p align="center"><a href="https://nvkudva.github.io/ollajev/#video"><img src="https://raw.githubusercontent.com/nvkudva/ollajev/main/docs/launch-poster.jpg" alt="Ollajev launch video: Like Ollama, for decision models" width="720"></a><br>
+<sub>▶ <a href="https://nvkudva.github.io/ollajev/#video">Watch the 53-second launch video</a>: the model manager, the Ollama-style commands, five models on one server and the playground.</sub></p>
+
 A local server that runs **System One decision models** from Hugging Face behind TypeSafe's
 **Jev / System One** wire API.
 
@@ -98,6 +101,8 @@ ollajev run        # in another terminal: ask the model questions
   the answers across models in the log. `w` in the model manager opens it too.
 
 ![The Ollajev model manager: a list of decision models with their status, size, runtime and language, and a Selected panel with Serve, Delete and Info buttons](https://raw.githubusercontent.com/nvkudva/ollajev/main/assets/model-manager.png)
+
+![The Ollajev playground: a model picker, a request editor with a state and typed questions, and a log of answers from two different models with probability bars](https://raw.githubusercontent.com/nvkudva/ollajev/main/docs/playground.png)
 
 ## Example
 
