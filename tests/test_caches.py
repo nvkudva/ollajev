@@ -5,6 +5,7 @@ reuse work only while it is unchanged.
 """
 
 import json
+import os
 from types import SimpleNamespace
 
 import httpx
@@ -119,5 +120,7 @@ def test_weights_size_rewalks_when_the_snapshot_grows(tmp_path):
     assert manager.weights_size(str(tmp_path)) == 100
     assert manager.weights_size(str(tmp_path)) == 100  # memo hit, same answer
     (tmp_path / "other.gguf").write_bytes(b"1" * 50)  # a new file bumps the dir mtime
+    stamp = os.stat(tmp_path).st_mtime_ns + 1_000_000_000  # NTFS ticks ~15ms, too coarse to rely on
+    os.utime(tmp_path, ns=(stamp, stamp))
     assert manager.weights_size(str(tmp_path)) == 150
     assert manager.weights_size("/no/such/dir") == 0
