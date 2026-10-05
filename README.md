@@ -91,7 +91,7 @@ for each one before uninstalling.
 
 ```sh
 ollajev            # first run: opens the model manager; pick a model, press Enter, then s to serve
-ollajev run        # in another terminal: ask the model questions
+ollajev serve      # start the server with the default model; opens the playground
 ```
 
 - The model manager lists the curated models, and `a` searches Hugging Face for any other. Run

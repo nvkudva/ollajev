@@ -624,7 +624,7 @@ function DefaultModel() {
 }
 
 function QuickStart() {
-  return html`<${Section} id="start" title="Install, open the manager, ask."
+  return html`<${Section} id="start" title="Install, open the manager, serve."
     lede="Three steps from nothing to a decision model answering on your machine.">
     <ol class="steps">
       <${InstallStep} />
@@ -634,9 +634,9 @@ function QuickStart() {
         <${Command} text="ollajev setup" label="command" />
       </div></li>
       <li><div>
-        <h3>Ask it something</h3>
-        <p>From another terminal, or call <code>http://127.0.0.1:8000/v1/systemone</code> from any client. The playground is at <code>/playground</code>: try requests on any downloaded model.</p>
-        <${Command} text="ollajev run" label="command" />
+        <h3>Serve it</h3>
+        <p>Starts the server with your default model and opens the playground at <code>/playground</code> in your browser. Any client can call <code>http://127.0.0.1:8000/v1/systemone</code>.</p>
+        <${Command} text="ollajev serve" label="command" />
       </div></li>
     </ol>
     <${DefaultModel} />
