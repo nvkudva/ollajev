@@ -52,10 +52,10 @@ ollajev = "ollajev.ui.cli:main"
 [dependency-groups]
 dev = [
     "pytest==9.1.1",
-    "typesafe-sdk==0.7.0",
-    "ruff==0.16.9",
+    "typesafe-sdk==0.7.2",
+    "ruff==0.16.10",
     "pyright==1.1.414",
-    "pre-commit==4.5.1",
+    "pre-commit==4.6.2",
 ]
 
 [build-system]
