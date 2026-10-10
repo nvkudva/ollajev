@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-10-10
+
+### Changed
+
+- Dependencies: torch 2.14.1, transformers 5.19, fastapi 0.143, uvicorn 0.54, decider-ai 1.9, peft 0.21.2,
+  platformdirs 4.12. huggingface-hub stays below 2 and laya below 0.4.
+- Linux takes torchvision from the PyTorch CPU index, like torch.
+- Releases update the Homebrew tap with a deploy key.
+
 ## [0.3.0] - 2026-10-10
 
 ### Added
