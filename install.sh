@@ -125,7 +125,7 @@ fi
 
 say "done. Next:"
 if [ "$SERVICE" = 1 ]; then
-  echo "    ollajev pull Mapika/decider-4b-GGUF:Q4_K_M   # download the default model"
+  echo "    ollajev pull nandakishorm/vega-08b-public-intents --trust   # download the default model"
   echo "    ollajev run                                  # ask it questions"
 else
   echo "    ollajev            # first run: pick a model, then serve"

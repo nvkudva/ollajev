@@ -6,6 +6,33 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- New `vega` family: `nandakishorm/vega-08b-public-intents` (Vega 0.8B, 1.8 GB with its backbone) and its
+  `:4b` size (9.5 GB), a physics engine over a frozen Qwen3.5 with a 73,728-token context. A tag that names a
+  folder in the repo now selects that folder. Vega reads one image per request for choice and noul questions,
+  through the repo's `vega_vision.py` (zero-shot; it loads a second copy of the backbone on the first image).
+
+### Fixed
+
+- Download sizes and progress include the base model a family fetches beside the repo (Vega's backbone).
+- The playground warns near the answering model's own token limit instead of a fixed 512.
+- After a Clef-MLX model loaded, PyTorch Qwen3.5 models got mlx-vlm's numpy image processor (mlx-vlm replaces
+  `AutoProcessor.from_pretrained` process-wide), so Vega's images failed with an internal error. The replacement now
+  applies only while a Clef-MLX model loads.
+
+- The playground has an `image` example: a sample invoice picture with choice and noul questions, which every
+  model that reads images answers.
+
+### Changed
+
+- When a model does not fit in free memory, idle models are unloaded first (least recently used; the model `serve`
+  preloaded stays), as the loaded-model limit already did.
+- Media and limit errors say what to do next, and point at the request field they came from (`body.images`, not
+  `body.questions`). A model that reads no images (or audio, video) names the downloaded models that do.
+- The default model is now Vega 0.8B (`nandakishorm/vega-08b-public-intents`), replacing
+  `Mapika/decider-4b-GGUF:Q4_K_M`. A default saved with `ollajev` (`d` in the manager) is kept.
+
 ## [0.3.1] - 2026-10-10
 
 ### Changed

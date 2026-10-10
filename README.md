@@ -68,15 +68,15 @@ curl -s http://127.0.0.1:8000/v1/systemone -H 'content-type: application/json' -
 
 ```json
 {
-  "model": "Mapika/decider-4b-GGUF:Q4_K_M",
+  "model": "nandakishorm/vega-08b-public-intents",
   "answers": {
-    "area":    {"type": "choice", "choice": "refund & dispute", "confidence": 0.9642,
-                "probabilities": {"refund & dispute": 0.9761, "card": 0.0104, "other": 0.0135}},
-    "urgency": {"type": "score", "score": 1.712, "confidence": 0.568,
-                "probabilities": {"0": 0.0099, "1": 0.2682, "2": 0.7219}},
-    "refund":  {"type": "noul", "noul": 0.9433, "confidence": 0.8866}
+    "area":    {"type": "choice", "choice": "refund & dispute", "confidence": 0.8397,
+                "probabilities": {"refund & dispute": 0.8932, "card": 0.0355, "other": 0.0714}},
+    "urgency": {"type": "score", "score": 0.9105, "confidence": 0.3798,
+                "probabilities": {"0": 0.2515, "1": 0.5865, "2": 0.162}},
+    "refund":  {"type": "noul", "noul": 0.6612, "confidence": 0.3224}
   },
-  "usage": {"input_tokens": 198, "output_tokens": 0}
+  "usage": {"input_tokens": 252, "output_tokens": 0}
 }
 ```
 
@@ -100,11 +100,12 @@ curl -s http://127.0.0.1:8000/v1/systemone -H 'content-type: application/json' -
 
 ## Models
 
-A model name is its Hugging Face repo id. GGUF repos take a quant tag (`user/repo:Q8_0`; Q4_K_M by default).
+A model name is its Hugging Face repo id. GGUF repos take a quant tag (`user/repo:Q8_0`; Q4_K_M by default); Vega takes `:4b` for its 4B size.
 
 | Model | Size | Runs on | Reads |
 |---|---|---|---|
-| `Mapika/decider-4b-GGUF:Q4_K_M` (default) | 2.7 GB | llama.cpp | text |
+| `nandakishorm/vega-08b-public-intents` (default), `:4b` | 1.8 / 9.5 GB | PyTorch | text (73k tokens); one image (choice and noul only) |
+| `Mapika/decider-4b-GGUF:Q4_K_M` | 2.7 GB | llama.cpp | text |
 | `Mapika/decider-2b-GGUF:Q4_K_M`, `:Q8_0` | 1.2 / 2.0 GB | llama.cpp | text |
 | `Mapika/decider-2b`, `decider-0.8b` | 3.8 / 1.5 GB | PyTorch | text |
 | `convaiinnovations/laya`, `laya-multilingual`, `laya-typed-decisions` | 0.7–0.9 GB | PyTorch | text |

@@ -407,7 +407,7 @@ def listed_variants(hit: Hit) -> list[Variant]:
 
 
 def variants(repo_id: str) -> list[Variant]:
-    """A repo's GGUF quants or ONNX exports, or its full weights, with download sizes, smallest first."""
+    """A repo's GGUF quants, ONNX exports or model folders, or its full weights, with download sizes, smallest first."""
     api = HfApi()
     # Two calls: the Hub forbids files_metadata together with expand, so the base-model lookup for
     # unrecognized repos is a second call, not a merged one.
@@ -420,23 +420,36 @@ def variants(repo_id: str) -> list[Variant]:
             repo_id, list(sizes), getattr(api.model_info(repo_id, expand=["baseModels"]), "base_models", None)
         )
         copy = family is not None
-    return _variants(repo_id, info.sha or "", sizes, family, copy=copy)
+    remote = getattr(family, "remote_extras", None) if not copy else None
+    extra = (lambda tag: sum(_repo_size(*e) for e in remote(repo_id, info.sha, tag))) if remote else None
+    return _variants(repo_id, info.sha or "", sizes, family, copy=copy, extra=extra)
+
+
+def _repo_size(repo_id: str, revision: str | None, allow: list[str] | None) -> int:
+    info = HfApi().model_info(repo_id, revision=revision, files_metadata=True)
+    sizes = {s.rfilename: s.size or 0 for s in info.siblings or []}
+    return sum(sizes[f] for f in filter_repo_objects(list(sizes), allow_patterns=allow))
 
 
 def _variants(
-    repo_id: str, sha: str, sizes: dict[str, int], family: Family | None, *, copy: bool = False
+    repo_id: str, sha: str, sizes: dict[str, int], family: Family | None, *, copy: bool = False, extra=None
 ) -> list[Variant]:
-    """copy: the weights come from this repo and the config files from its base, so only the weights count."""
+    """copy: the weights come from this repo and the config files from its base, so only the weights count.
+    extra(tag): bytes of the other repos that variant needs, such as Vega's backbone."""
     files = list(sizes)
     tags = {w: t for w, t in names.labels(files).items() if family is None or _runs(family, w, files)}
+    folders = getattr(family, "folders", None) if not copy else None  # model folders in the repo, like Vega's 4b/
     found = []
-    for weights, tag in tags.items() if tags else [(None, None)]:
+    for weights, tag in (
+        tags.items() if tags else [(None, None), *((None, f) for f in (folders(files) if folders else []))]
+    ):
         ref = Ref(repo_id, tag)
         if family and not copy:
             allow = family.allow_patterns(Resolved(ref, family, sha, files, weights))
         else:
             allow = [weights, *names.sidecars(weights)] if weights else None
         size = sum(sizes[f] for f in filter_repo_objects(files, allow_patterns=allow))
+        size += extra(tag) if extra else 0
         found.append(Variant(ref.name, tag or "full weights", size))
     return sorted(found, key=lambda v: v.size)
 
@@ -444,6 +457,8 @@ def _variants(
 def _pick(ref: Ref, files: list[str]) -> str | None:
     if names.weight_files(files):
         return names.pick_weights(files, ref.tag)
+    if ref.tag and any(f.startswith(f"{ref.tag}/") for f in files):
+        return None  # a tag naming a model folder in the repo, like Vega's 4b/
     if ref.tag:
         raise ValueError(f"{ref.repo_id} has no quantized files; drop ':{ref.tag}'")
     return None
@@ -520,11 +535,21 @@ def needs_prefetch(resolved: Resolved) -> bool:
     return hasattr(resolved.family, "prefetch")
 
 
+def _remote_extras(resolved: Resolved) -> list[tuple[str, str | None, list[str]]]:
+    read = getattr(resolved.family, "remote_extras", None)
+    return read(resolved.repo_id, resolved.revision, resolved.ref.tag) if read and resolved.base is None else []
+
+
 def download_size(resolved: Resolved) -> int:
-    """Bytes `download` fetches for `r`'s own repo."""
-    info = HfApi().model_info(resolved.repo_id, revision=resolved.revision, files_metadata=True)
-    sizes = {s.rfilename: s.size or 0 for s in info.siblings or []}
-    return sum(sizes[f] for f in filter_repo_objects(list(sizes), allow_patterns=resolved.allow))
+    """Bytes a pull of `r` fetches: its own files plus the repos its family needs beside them (Vega's backbone)
+    that are not on disk yet."""
+    extra = sum(max(0, _repo_size(*e) - bytes_on_disk(e[0])) for e in _remote_extras(resolved))
+    return _repo_size(resolved.repo_id, resolved.revision, resolved.allow) + extra
+
+
+def download_repos(resolved: Resolved) -> list[str]:
+    """The repos a pull of `r` grows in the cache, to follow its progress."""
+    return [resolved.repo_id, *(repo for repo, _, _ in _remote_extras(resolved))]
 
 
 def bytes_on_disk(repo_id: str) -> int:

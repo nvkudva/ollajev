@@ -16,7 +16,9 @@ class Entry:
 
 
 CATALOG: list[Entry] = [
-    Entry(DEFAULT_MODEL, 2.7, "English", "Qwen3.5-4B decider, 4-bit GGUF on llama.cpp"),
+    Entry(DEFAULT_MODEL, 1.84, "English", "Vega, physics engine on a frozen Qwen3.5-0.8B, 73k context"),
+    Entry(f"{DEFAULT_MODEL}:4b", 9.5, "English", "Vega, physics engine on a frozen Qwen3.5-4B, 73k context"),
+    Entry("Mapika/decider-4b-GGUF:Q4_K_M", 2.7, "English", "Qwen3.5-4B decider, 4-bit GGUF on llama.cpp"),
     Entry("Mapika/decider-2b-GGUF:Q4_K_M", 1.2, "English", "Qwen3.5-2B decider, 4-bit GGUF on llama.cpp"),
     Entry("Mapika/decider-2b-GGUF:Q8_0", 2.0, "English", "Qwen3.5-2B decider, 8-bit GGUF on llama.cpp"),
     Entry("Mapika/decider-2b", 3.76, "English", "Qwen3.5-2B decider, bf16 on PyTorch"),

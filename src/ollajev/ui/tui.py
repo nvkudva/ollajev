@@ -821,9 +821,10 @@ class Models(App[bool]):
         name = canonical(resolved)
         try:
             total = await asyncio.to_thread(store.download_size, resolved)
+            repos = await asyncio.to_thread(store.download_repos, resolved)
         except Exception:  # progress is optional; the download itself reports real errors
-            total = 0
-        start = store.bytes_on_disk(resolved.repo_id)
+            total, repos = 0, [resolved.repo_id]
+        start = sum(store.bytes_on_disk(r) for r in repos)
         started = time.monotonic()
         bar = self.query_one("#progress", ProgressBar)
         bar.update(total=total or None, progress=0)
@@ -833,7 +834,7 @@ class Models(App[bool]):
             if self.cancel.is_set():  # the download stops at its next check; say so until it does
                 self.say("Cancelling download …")
                 return
-            done = store.bytes_on_disk(resolved.repo_id) - start
+            done = sum(store.bytes_on_disk(r) for r in repos) - start
             speed = done / max(time.monotonic() - started, 0.001)
             if total:
                 percent = min(100, done * 100 // total)

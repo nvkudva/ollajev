@@ -1,7 +1,8 @@
 """Ready-made requests for the playground page: a sample state plus a question set that exercises it.
 
 Kept inside every phase 1 model's limits: at most 6 options or levels per question (Julia takes 20)
-and short enough for open-jev's 512 tokens.
+and short enough for open-jev's 512 tokens. The image example attaches a picture served from /static and asks only
+choice and noul questions, which every model that reads images answers (Vega reads images without score).
 """
 
 from __future__ import annotations
@@ -127,6 +128,23 @@ EXAMPLES: dict[str, dict[str, Any]] = {
                 "instructions": "How upset is the sender?",
                 "criteria": ["Calm", "Mildly annoyed", "Upset", "Angry"],
             },
+        },
+    },
+    "image": {
+        "state": "A customer attached this file to a support ticket.",
+        "images": ["/static/example-invoice.png"],
+        "questions": {
+            "document": {
+                "type": "choice",
+                "instructions": "What kind of file is attached?",
+                "criteria": {
+                    "invoice": "A bill asking for payment",
+                    "receipt": "Proof that a payment was made",
+                    "contract": "An agreement to sign",
+                    "photo": "A picture, not a document",
+                },
+            },
+            "payment_due": {"type": "noul", "instructions": "The attachment asks someone to pay money."},
         },
     },
 }

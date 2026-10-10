@@ -18,7 +18,7 @@ import platformdirs
 log = logging.getLogger(__name__)
 _lock = threading.RLock()
 
-DEFAULT_MODEL = "Mapika/decider-4b-GGUF:Q4_K_M"
+DEFAULT_MODEL = "nandakishorm/vega-08b-public-intents"
 DEFAULT_PORT = 8000
 
 

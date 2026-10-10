@@ -14,6 +14,7 @@ import pickle
 import zipfile
 from typing import Any
 
+from . import cached_repo
 from .base import Loaded
 
 LIMITS = {"max_options": 255, "max_levels": 10, "max_tokens": 8192}
@@ -118,18 +119,11 @@ class _Kev:
 
 
 def _use_cached_base(meta: Any) -> None:
-    """Point the checkpoint at the base model's downloaded folder instead of its repo name. By name, each
-    from_pretrained call (tokenizer, config, weights) first asks Hugging Face for the latest files: kev-0.5b took
-    20-30 s to load that way and 2.6 s from the folder. A base that is not downloaded keeps its name and downloads."""
-    # Not snapshot_download(local_files_only=True): it refuses a snapshot missing README.md and the like, which
-    # prefetch skips on purpose.
-    from huggingface_hub import try_to_load_from_cache
-
-    config_file = try_to_load_from_cache(meta.base, "config.json", revision=meta.base_revision)
-    if not isinstance(config_file, str):
-        return
-    meta.base = os.path.dirname(config_file)
-    meta.base_revision = None
+    """Point the checkpoint at the base model's downloaded folder instead of its repo name. A base that is not
+    downloaded keeps its name and downloads."""
+    folder = cached_repo(meta.base, meta.base_revision)
+    if folder:
+        meta.base, meta.base_revision = folder, None
 
 
 FAMILY = _Kev()

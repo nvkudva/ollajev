@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 import math
+import os
 import sys
 import threading
 from pathlib import Path
@@ -28,9 +29,26 @@ class Family(Protocol):
 
 
 def families() -> list[Family]:
-    from . import clef, clef_mlx, d1, decider, decision1, intern, jevk5, julia, kev, laya, onejev, openjev, rlcd, von
+    from . import (
+        clef,
+        clef_mlx,
+        d1,
+        decider,
+        decision1,
+        intern,
+        jevk5,
+        julia,
+        kev,
+        laya,
+        onejev,
+        openjev,
+        rlcd,
+        vega,
+        von,
+    )
 
     found = [
+        vega.FAMILY,
         laya.FAMILY,
         decider.FAMILY,
         clef.FAMILY,
@@ -87,6 +105,18 @@ def import_from(root: str, module: str) -> Any:
             return importlib.import_module(module)
         finally:
             sys.path.remove(root)
+
+
+def cached_repo(repo: str, revision: str | None) -> str | None:
+    """The downloaded folder of a base model `prefetch` fetched, or None when it is not on disk. Loading from the
+    folder instead of the repo name skips a Hugging Face round trip per from_pretrained call (kev-0.5b: 20-30 s
+    against 2.6 s)."""
+    # Not snapshot_download(local_files_only=True): it refuses a snapshot missing README.md and the like, which
+    # prefetch skips on purpose.
+    from huggingface_hub import try_to_load_from_cache
+
+    config_file = try_to_load_from_cache(repo, "config.json", revision=revision)
+    return os.path.dirname(config_file) if isinstance(config_file, str) else None
 
 
 def text_state(state: Any) -> str:

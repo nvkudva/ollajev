@@ -22,6 +22,24 @@ VIDEO_FRAME_PIXELS = 256 * 32 * 32
 # context anyway (clef-omni spends ~150-260 tokens per second of video).
 MAX_VIDEO_SECONDS = 300
 
+NOUNS = {"images": "image", "audio": "audio clip", "videos": "video"}
+PLURALS = {"text": "text", "image": "images", "audio": "audio", "video": "videos"}  # limits["inputs"] entries
+FORMATS = {
+    "images": "PNG, JPEG, WebP, GIF or BMP",
+    "audio": "WAV, MP3, FLAC, OGG or M4A",
+    "videos": "MP4, MOV, WebM or MKV",
+}
+
+
+class Invalid(ValueError):
+    """Media a request cannot use. `field` is the request field it came from; `kind` is set when the model reads no
+    media of that kind, so the caller can name models that do."""
+
+    def __init__(self, field: str, message: str, kind: str | None = None):
+        super().__init__(message)
+        self.field, self.kind = field, kind
+
+
 _DATA_URL = re.compile(r"^data:[\w.+-]+/[\w.+-]+(?:;[\w.+-]+=[\w.+-]+)*;base64,(?P<data>.*)$", re.DOTALL)
 
 
@@ -31,11 +49,18 @@ def decode(field: str, urls: list[str]) -> list[bytes]:
     for i, url in enumerate(urls):
         match = _DATA_URL.match(url)
         if match is None:
-            raise ValueError(f"{field}[{i}]: send a base64 data URL (data:<type>;base64,...)")
+            raise Invalid(
+                field,
+                f"{field}[{i}] is not a base64 data URL. Send the file itself as data:<type>;base64,<data>; "
+                "web addresses and file paths are never fetched.",
+            )
         try:
             out.append(base64.b64decode(match["data"], validate=True))
         except binascii.Error:
-            raise ValueError(f"{field}[{i}]: invalid base64") from None
+            raise Invalid(
+                field,
+                f"{field}[{i}] is not valid base64. Encode the whole file as standard base64, without line breaks.",
+            ) from None
     return out
 
 
@@ -44,12 +69,31 @@ def check(limits: dict[str, Any], media: dict[str, list[bytes]]) -> None:
     inputs = limits.get("inputs", ["text"])
     for field, items in media.items():
         if items and KINDS[field] not in inputs:
-            raise ValueError(f"this model reads {', '.join(inputs)}; it takes no {field}")
+            raise Invalid(
+                field,
+                f"this model reads {_reads(inputs)}; it takes no {field}. Remove the {NOUNS[field]}s "
+                "or pick a model that reads them.",
+                kind=KINDS[field],
+            )
         if items and (n := limits.get(f"max_{field}")) and len(items) > n:
-            raise ValueError(f"this model takes at most {n} {field} per request, got {len(items)}")
+            what = NOUNS[field] if n == 1 else f"{NOUNS[field]}s"
+            raise Invalid(
+                field,
+                f"this model takes at most {n} {what} per request, got {len(items)}. "
+                "Send the others in separate requests.",
+            )
     for i, data in enumerate(media.get("videos") or []):
         if (seconds := _seconds(data)) is not None and seconds > MAX_VIDEO_SECONDS:
-            raise ValueError(f"videos[{i}] is {seconds:.0f} s long; the limit is {MAX_VIDEO_SECONDS} s")
+            raise Invalid(
+                "videos",
+                f"videos[{i}] is {seconds:.0f} s long; the limit is {MAX_VIDEO_SECONDS} s. Trim it or send a shorter clip.",
+            )
+
+
+def _reads(inputs: list[str]) -> str:
+    """["text", "image"] -> "text and images"."""
+    words = [PLURALS.get(k, k) for k in inputs]
+    return words[0] if len(words) == 1 else f"{', '.join(words[:-1])} and {words[-1]}"
 
 
 def _seconds(data: bytes) -> float | None:
@@ -71,8 +115,12 @@ def image(data: bytes) -> Any:
     try:
         with Image.open(io.BytesIO(data)) as img:
             return img.convert("RGB")
-    except (UnidentifiedImageError, Image.DecompressionBombError, OSError) as exc:
-        raise ValueError(f"image could not be read: {exc}") from None
+    except UnidentifiedImageError:
+        raise Invalid(
+            "images", f"the file is not an image this server can read. Send a {FORMATS['images']} file."
+        ) from None
+    except (Image.DecompressionBombError, OSError) as exc:
+        raise Invalid("images", f"image could not be read ({exc}). Send a {FORMATS['images']} file.") from None
 
 
 def audio(data: bytes) -> Any:
@@ -84,7 +132,7 @@ def audio(data: bytes) -> Any:
     try:
         with av.open(io.BytesIO(data), mode="r") as container:
             if not container.streams.audio:
-                raise ValueError("audio has no audio stream")
+                raise Invalid("audio", f"audio has no audio stream. Send a {FORMATS['audio']} file.")
             stream = container.streams.audio[0]
             resampler = av.AudioResampler(format="flt", layout="mono", rate=AUDIO_RATE)
             chunks = [
@@ -93,9 +141,9 @@ def audio(data: bytes) -> Any:
                 for out in resampler.resample(frame)
             ]
     except FFmpegError as exc:
-        raise ValueError(f"audio could not be read: {exc}") from None
+        raise Invalid("audio", f"audio could not be read ({exc}). Send a {FORMATS['audio']} file.") from None
     if not chunks:
-        raise ValueError("audio has no decodable samples")
+        raise Invalid("audio", "audio has no decodable samples; the clip is empty or silent-only. Send another file.")
     return np.concatenate(chunks).astype(np.float32, copy=False)
 
 
@@ -109,7 +157,7 @@ def video(data: bytes) -> Any:
     try:
         with av.open(io.BytesIO(data), mode="r") as container:
             if not container.streams.video:
-                raise ValueError("video has no video stream")
+                raise Invalid("videos", f"video has no video stream. Send a {FORMATS['videos']} file.")
             stream = container.streams.video[0]
             start = None
             for frame in container.decode(stream):
@@ -119,13 +167,15 @@ def video(data: bytes) -> Any:
                 if frame.time - start + 1e-6 < len(frames) / VIDEO_FPS:
                     continue
                 if len(frames) >= MAX_VIDEO_SECONDS * VIDEO_FPS:  # no duration in the header: stop here
-                    raise ValueError(f"video is longer than {MAX_VIDEO_SECONDS} s")
+                    raise Invalid(
+                        "videos", f"video is longer than {MAX_VIDEO_SECONDS} s. Trim it or send a shorter clip."
+                    )
                 scale = min(1.0, math.sqrt(VIDEO_FRAME_PIXELS / (frame.width * frame.height)))
                 width = max(2, round(frame.width * scale / 2) * 2)
                 height = max(2, round(frame.height * scale / 2) * 2)
                 frames.append(frame.to_ndarray(format="rgb24", width=width, height=height))
     except FFmpegError as exc:
-        raise ValueError(f"video could not be read: {exc}") from None
+        raise Invalid("videos", f"video could not be read ({exc}). Send a {FORMATS['videos']} file.") from None
     if not frames:
-        raise ValueError("video has no decodable frames")
+        raise Invalid("videos", f"video has no decodable frames. Send a {FORMATS['videos']} file.")
     return np.stack(frames)

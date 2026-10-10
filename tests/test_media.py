@@ -65,7 +65,7 @@ def test_image_and_audio_decode():
     samples = media.audio(wav(0.5))
     assert samples.dtype.name == "float32"
     assert abs(len(samples) - media.AUDIO_RATE // 2) < 400  # resampled from 22.05 kHz stereo to 16 kHz mono
-    with pytest.raises(ValueError, match="image could not be read"):
+    with pytest.raises(media.Invalid, match=r"not an image this server can read\. Send a PNG"):
         media.image(b"not an image")
     with pytest.raises(ValueError, match="could not be read"):
         media.audio(b"not audio")

@@ -230,7 +230,7 @@ async def system_one(req: Annotated[SystemOneRequest, Body()], response: Respons
     for field in media.KINDS:
         try:  # up to OLLAJEV_MAX_BODY_BYTES of base64: off the event loop
             inputs[field] = await asyncio.to_thread(media.decode, field, getattr(req, field) or [])
-        except ValueError as exc:
+        except media.Invalid as exc:
             return _invalid(["body", field], str(exc))
     manager = current_manager()
     requested_at = time.time()
@@ -248,6 +248,8 @@ async def system_one(req: Annotated[SystemOneRequest, Body()], response: Respons
         answers = normalize.answers(questions, result["answers"])
     except (NotDownloaded, NotTrusted, NotEnoughMemory) as exc:
         return _model_error(exc)
+    except media.Invalid as exc:
+        return _invalid(["body", exc.field], await asyncio.to_thread(_with_readers, exc))
     except ValueError as exc:
         return _invalid(["body", "questions"], str(exc))
     if slot.loaded_at >= requested_at:
@@ -269,6 +271,19 @@ async def system_one(req: Annotated[SystemOneRequest, Body()], response: Respons
             "output_tokens": int(usage.get("output_tokens", 0)),
         },
     }
+
+
+def _with_readers(exc: media.Invalid) -> str:
+    """A media error, plus the downloaded models that read that kind of media when the chosen one reads none."""
+    if exc.kind is None:
+        return str(exc)
+    readers = [m["name"] for m in admin.tags() if exc.kind in (m["limits"] or {}).get("inputs", ["text"])]
+    if readers:
+        return f"{exc} Downloaded models that read {media.PLURALS[exc.kind]}: {', '.join(readers)}."
+    return (
+        f"{exc} None of your downloaded models reads {media.PLURALS[exc.kind]}; "
+        "`ollajev show <model>` lists what a model reads."
+    )
 
 
 def _server_timing(load_seconds: float | None, run_seconds: float) -> str:

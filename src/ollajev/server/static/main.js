@@ -224,8 +224,19 @@ function setField(path, value) {
   save();
 }
 
-/** Load a named example: its sample state into the textarea, its questions into the editor. */
-function adoptExample(example) {
+/** Load a named example: its sample state into the textarea, its questions into the editor, and its sample files
+    (served from /static) in place of whatever was attached. */
+async function adoptExample(example) {
+  attachments.length = 0;
+  for (const src of example.images ?? []) {
+    try {
+      const blob = await (await fetch(src)).blob();
+      attachments.push({ kind: "image", field: "images", name: src.split("/").pop(), url: await readDataUrl(blob) });
+    } catch {
+      failRequest(`The example image ${src} could not be loaded; attach your own image instead.`);
+    }
+  }
+  paintMedia();
   stateBox.value = example.state;
   store.set("ollajev.state", example.state);
   syncSend();
@@ -437,13 +448,14 @@ function applyView(turnEl, view) {
 
 function turnHeadMarkup(turn, index) {
   const tokens = turn.data?.usage?.input_tokens;
+  const maxTokens = models.find((m) => m.name === turn.data?.model)?.limits?.max_tokens;
   const time = turn.at ? new Date(turn.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : null;
   return html`
     <header class="turn-head" data-act="toggle-turn" data-i="${index}">
       <button type="button" class="turn-toggle" aria-expanded="false"><span class="turn-caret" aria-hidden="true">▸</span> Request #${index + 1}</button>
       ${time ? html`<span>· ${time}</span>` : ""}
       <span class="turn-meta">
-        ${tokens >= 450 ? html`<span class="turn-warn" title="Content past the 512-token context limit is silently truncated">⚠ near 512-tok limit</span>` : ""}
+        ${maxTokens && tokens >= 0.9 * maxTokens ? html`<span class="turn-warn" title="Requests past the model's ${maxTokens}-token limit are refused or truncated">⚠ near ${maxTokens}-tok limit</span>` : ""}
         <span>${turn.data ? (tokens != null ? `${tokens} tok` : "done") : turn.pending ? "sending…" : "failed"}</span>
         ${turn.loadMs != null ? html`<span title="Loading the model into memory, before this request could run">load ${turn.loadMs} ms</span>` : ""}
         ${turn.ms != null ? html`<span title="Time the model took to answer">${turn.ms} ms</span>` : ""}

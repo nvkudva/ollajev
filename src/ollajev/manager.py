@@ -152,10 +152,15 @@ class Manager:
             self.unload(victim)
         device = pick_device(config.device())
         need, free = int(weights_size(path) * MEMORY_HEADROOM), free_memory(device)
+        while need > free and (idle := [s for s in self.loaded() if not s.pinned and not s.lock.locked()]):
+            self.unload(min(idle, key=lambda s: s.expires).name)  # like the count limit: least recently used first
+            free = free_memory(device)
         if need > free:
+            busy = ", ".join(s.name for s in self.loaded())
             raise NotEnoughMemory(
-                f"{key} needs about {need / 2**30:.1f} GiB but only {free / 2**30:.1f} GiB is free on {device}; "
-                "stop a loaded model (ollajev stop) or close other apps, or pick a smaller quant"
+                f"{key} needs about {need / 2**30:.1f} GiB but only {free / 2**30:.1f} GiB is free on {device}"
+                + (f" with {busy} still loaded" if busy else "")
+                + ". Close other apps, or pick a smaller model or quant."
             )
         log.info("Loading %s on %s …", key, device)
         started = time.monotonic()
@@ -239,13 +244,22 @@ class Manager:
 def check_limits(limits: dict[str, Any], questions: dict[str, dict[str, Any]]) -> None:
     """Reject what the loaded model cannot take before it runs. Token limits stay with the model."""
     if (n := limits.get("max_questions")) and len(questions) > n:
-        raise ValueError(f"this model takes at most {n} questions per request, got {len(questions)}")
+        raise ValueError(
+            f"this model takes at most {n} questions per request, got {len(questions)}. "
+            "Split them across requests, or pick a model that takes more."
+        )
     for qid, q in questions.items():
         count = len(q.get("criteria") or ())
         if q["type"] == "choice" and (n := limits.get("max_options")) and count > n:
-            raise ValueError(f"question {qid!r}: this model takes at most {n} choice options, got {count}")
+            raise ValueError(
+                f"question {qid!r}: this model takes at most {n} choice options, got {count}. "
+                "Merge or drop options, or pick a model that takes more."
+            )
         if q["type"] == "score" and (n := limits.get("max_levels")) and count > n:
-            raise ValueError(f"question {qid!r}: this model takes at most {n} score levels, got {count}")
+            raise ValueError(
+                f"question {qid!r}: this model takes at most {n} score levels, got {count}. "
+                "Use fewer levels, or pick a model that takes more."
+            )
 
 
 def _empty_device_cache() -> None:

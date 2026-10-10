@@ -97,18 +97,19 @@ def api_show(req: ModelRef) -> Any:
 
 
 def report_bytes(resolved: store.Resolved, status: str, events: queue.Queue[dict[str, Any] | None]) -> None:
-    """Download `r`, putting a `completed`/`total` byte event on `events` as the cache grows."""
+    """Download `r` and the repos its family needs beside it, putting a `completed`/`total` byte event on `events`
+    as the cache grows."""
     done = threading.Event()
     try:
-        total = store.download_size(resolved)
+        total, repos = store.download_size(resolved), store.download_repos(resolved)
     except Exception:  # progress is optional; the download itself reports real errors
-        total = 0
-    start = store.bytes_on_disk(resolved.repo_id)
+        total, repos = 0, [resolved.repo_id]
+    start = sum(store.bytes_on_disk(r) for r in repos)
 
     def poll() -> None:
         last = -1
         while not done.wait(1.0):
-            completed = min(store.bytes_on_disk(resolved.repo_id) - start, total)
+            completed = min(sum(store.bytes_on_disk(r) for r in repos) - start, total)
             if completed != last:
                 last = completed
                 events.put({"status": status, "digest": resolved.revision, "total": total, "completed": completed})
@@ -117,6 +118,9 @@ def report_bytes(resolved: store.Resolved, status: str, events: queue.Queue[dict
         threading.Thread(target=poll, daemon=True).start()
     try:
         store.download(resolved)
+        if store.needs_prefetch(resolved):
+            events.put({"status": "downloading base model"})
+            store.prefetch(resolved)
     finally:
         done.set()
 
@@ -148,9 +152,6 @@ def _download_with_events(resolved: store.Resolved, events: queue.Queue[dict[str
     status = f"downloading {resolved.repo_id}@{resolved.revision[:12]}"
     events.put({"status": status, "digest": resolved.revision})
     report_bytes(resolved, status, events)
-    if store.needs_prefetch(resolved):
-        events.put({"status": "downloading base model"})
-        store.prefetch(resolved)
     events.put({"status": "success", "model": canonical(resolved)})
 
 

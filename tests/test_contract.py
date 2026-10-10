@@ -356,6 +356,27 @@ def test_load_refuses_a_model_that_does_not_fit_in_free_memory(monkeypatch, tmp_
         manager.Manager()._load("m", r)
 
 
+def test_load_unloads_idle_models_until_the_new_one_fits(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    from ollajev import manager, registry, store
+
+    (tmp_path / "m.safetensors").write_bytes(b"x" * 1000)
+    monkeypatch.setattr(registry, "is_trusted", lambda r: True)
+    monkeypatch.setattr(store, "local_path", lambda r: str(tmp_path))
+    monkeypatch.setattr(manager, "pick_device", lambda requested: "cpu")
+    monkeypatch.setattr(manager.config, "max_loaded_models", lambda: 10)
+    unloaded: list[str] = []
+    monkeypatch.setattr(manager, "free_memory", lambda device: 1000 * len(unloaded))  # each unload frees 1000
+    m = manager.Manager()
+    for name, expires in (("old", 2.0), ("older", 1.0), ("pinned", float("inf"))):
+        m._slots[name] = manager.Slot(name, SimpleNamespace(), None, "cpu", expires=expires, pinned=name == "pinned")
+    monkeypatch.setattr(m, "unload", lambda name: unloaded.append(name) or m._slots.pop(name))
+    r = SimpleNamespace(revision="r" * 12, family=SimpleNamespace(load=lambda *a: SimpleNamespace(device=None)))
+    m._load("m", r)
+    assert unloaded == ["older", "old"]  # least recently used first; the pinned model stays
+
+
 def test_a_cancelled_download_stops_at_its_next_progress_update(monkeypatch):
     import threading
 
