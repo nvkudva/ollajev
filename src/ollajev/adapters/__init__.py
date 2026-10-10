@@ -28,17 +28,19 @@ class Family(Protocol):
 
 
 def families() -> list[Family]:
-    from . import clef, decider, decision1, intern, jevk5, julia, kev, laya, onejev, openjev, rlcd, von
+    from . import clef, clef_mlx, d1, decider, decision1, intern, jevk5, julia, kev, laya, onejev, openjev, rlcd, von
 
     found = [
         laya.FAMILY,
         decider.FAMILY,
         clef.FAMILY,
+        clef_mlx.FAMILY,
         julia.FAMILY,
         openjev.FAMILY,
         kev.FAMILY,
         intern.FAMILY,
         decision1.FAMILY,
+        d1.FAMILY,
         jevk5.FAMILY,
         onejev.FAMILY,
         rlcd.FAMILY,

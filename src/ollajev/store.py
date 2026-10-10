@@ -179,6 +179,10 @@ def _resolve(ref: Ref, revision: str | None, *, online: bool, allow_base: bool) 
             if not online:
                 raise LookupError(f"{ref.name} is not downloaded; run: ollajev pull {ref.name}") from None
             files = None  # a quant of a downloaded repo that is not on disk yet
+    if files is not None and online and weights is None and not _detects(ref.repo_id, files):
+        # Downloaded before its family fetched the file it is detected by: the repo's own list decides.
+        # (Copies resolved through a base model pick one weights file and are detected by that base.)
+        files = None
     if files is None:
         if not online:
             raise LookupError(f"{ref.name} is not downloaded; run: ollajev pull {ref.name}")
@@ -261,6 +265,14 @@ class Variant:
     name: str  # what `pull` takes
     label: str
     size: int
+
+
+def _detects(repo_id: str, files: list[str]) -> bool:
+    try:
+        detect(repo_id, files)
+    except LookupError:
+        return False
+    return True
 
 
 def _family(repo_id: str, files: list[str], base_models: dict | None = None, files_of: Any = None) -> Family | None:

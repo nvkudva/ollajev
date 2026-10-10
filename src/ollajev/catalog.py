@@ -49,4 +49,12 @@ CATALOG: list[Entry] = [
     Entry("OmniJev/OneJev-4B", 10.4, "Multilingual", "OneJev, Qwen3.5-4B, letters read from the LM head"),
     Entry("Cloudflare/clef-flash", 19.1, "Multilingual", "clef-flash, the smaller clef, joint schema head"),
     Entry("Cloudflare/clef", 55.0, "Multilingual", "clef, Qwen3.5 backbone with a joint schema head"),
+    Entry("Cloudflare/clef-omni", 70.9, "Multilingual", "clef-omni, Qwen3-Omni 30B-A3B; images, audio, video"),
+    Entry("mlx-community/clef-flash-4bit", 6.2, "Multilingual", "clef-flash, 4-bit MLX for Apple Silicon"),
+    Entry("mlx-community/clef-flash-8bit", 10.7, "Multilingual", "clef-flash, 8-bit MLX for Apple Silicon"),
+    Entry("mlx-community/clef-4bit", 16.3, "Multilingual", "clef, 4-bit MLX for Apple Silicon"),
+    Entry("mlx-community/clef-8bit", 29.8, "Multilingual", "clef, 8-bit MLX for Apple Silicon"),
+    Entry("mlx-community/clef-omni-4bit", 19.8, "Multilingual", "clef-omni, 4-bit MLX for Apple Silicon"),
+    Entry("mlx-community/clef-omni-8bit", 35.0, "Multilingual", "clef-omni, 8-bit MLX for Apple Silicon"),
+    Entry("LiquidAI/d1-omni-600M", 2.35, "Multilingual", "d1-omni, LFM2.5 encoder; images or 30 s of speech"),
 ]

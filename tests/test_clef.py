@@ -105,3 +105,44 @@ def test_answers_normalize_to_the_wire_shape():
     assert list(out["team"]["probabilities"]) == ["tech", "billing"]  # request order
     assert out["urgency"]["score"] == pytest.approx(1.6)
     assert out["urgency"]["legend"]["2"] == "Today"
+
+
+def test_omni_reads_audio_and_a_longer_context(tmp_path):
+    omni = SimpleNamespace(repo_id="Cloudflare/clef-omni")
+    dense = SimpleNamespace(repo_id="Cloudflare/clef-flash")
+    assert clef.FAMILY.limits(omni)["inputs"] == ["text", "image", "audio", "video"]
+    assert clef.FAMILY.limits(omni)["max_tokens"] == 64000
+    assert clef.FAMILY.limits(dense)["inputs"] == ["text", "image", "video"]
+    assert detect("Cloudflare/clef-omni", [*CLEF_FILES, "processor_config.json"]) is clef.FAMILY
+    (tmp_path / "config.json").write_text('{"model_type": "qwen3_omni_moe"}')
+    assert clef.is_omni(str(tmp_path))
+    (tmp_path / "config.json").write_text('{"model_type": "qwen3_5"}')
+    assert not clef.is_omni(str(tmp_path))
+
+
+def test_mlx_omni_copies_get_the_mlx_family():
+    from ollajev.adapters import clef_mlx
+
+    mlx = [f for f in CLEF_FILES if f != "joint_schema_model.py"] + ["clef_mlx.py"]
+    assert detect("mlx-community/clef-omni-4bit", mlx) is clef_mlx.FAMILY
+    assert clef_mlx.FAMILY.limits(SimpleNamespace(repo_id="mlx-community/clef-omni-4bit"))["inputs"][-1] == "video"
+    # Offline detection reads the snapshot, so the marker scripts must be downloaded (never imported).
+    assert "clef_mlx.py" in clef_mlx.FAMILY.allow_patterns(None)
+    assert "joint_schema_model.py" in clef.FAMILY.allow_patterns(None)
+    assert detect("mlx-community/clef-flash-4bit", mlx) is clef_mlx.FAMILY  # dense copies: the other vendored script
+    assert clef_mlx.FAMILY.limits(SimpleNamespace(repo_id="mlx-community/clef-flash-4bit")) == clef.LIMITS
+
+
+def test_a_snapshot_without_its_marker_script_resolves_from_the_repo_again(tmp_path, monkeypatch):
+    """Clef snapshots pulled before the marker script was fetched are detected from the repo's file list online."""
+    from ollajev import registry, store
+
+    monkeypatch.setenv("OLLAJEV_HOME", str(tmp_path))
+    mlx = [f for f in CLEF_FILES if f != "joint_schema_model.py"] + ["clef_mlx.py"]
+    local = [f for f in mlx if f != "clef_mlx.py"]
+    monkeypatch.setattr(registry, "pins", lambda: {"mlx-community/clef-flash-4bit": "a" * 40})
+    monkeypatch.setattr(store, "_local_files", lambda repo, rev: local)
+    monkeypatch.setattr(store, "_remote_files", lambda repo, rev: ("a" * 40, None, mlx, []))
+    assert store.resolve("mlx-community/clef-flash-4bit").family.name == "clef-mlx"
+    with pytest.raises(LookupError):  # offline there is nothing else to go on
+        store.resolve("mlx-community/clef-flash-4bit", online=False)

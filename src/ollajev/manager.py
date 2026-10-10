@@ -14,7 +14,7 @@ from typing import Any
 
 import psutil
 
-from . import config, names, registry, store
+from . import config, media, names, registry, store
 from .adapters import pick_device
 from .adapters.base import Adapter
 
@@ -208,17 +208,29 @@ class Manager:
                     self.unload(slot.name)
 
     def run(
-        self, name: str | None, state: Any, questions: dict[str, dict[str, Any]], keep_alive: float | None = None
+        self,
+        name: str | None,
+        state: Any,
+        questions: dict[str, dict[str, Any]],
+        keep_alive: float | None = None,
+        inputs: dict[str, list[bytes]] | None = None,
     ) -> tuple[Slot, dict[str, Any]]:
+        if any((inputs or {}).values()):  # before a load: media a model cannot read must not load it
+            resolved = self.resolve(name)
+            media.check(resolved.family.limits(resolved), inputs or {})
         while True:
             slot = self.get(name, keep_alive)
             check_limits(slot.adapter.limits, questions)
+            media.check(slot.adapter.limits, inputs or {})  # the loaded model's own limits are the final word
             # One forward pass per model at a time: on MPS concurrent forwards abort the process with a
             # Metal command-buffer assertion, and several adapters keep per-call state.
             with slot.lock:
                 if slot.closed:  # unloaded between get and here: load it again
                     continue
-                result = slot.adapter.system_one(state, questions)
+                if any((inputs or {}).values()):
+                    result = slot.adapter.system_one(state, questions, inputs)
+                else:
+                    result = slot.adapter.system_one(state, questions)
             break
         self._touch(slot, keep_alive)
         return slot, result
@@ -237,6 +249,9 @@ def check_limits(limits: dict[str, Any], questions: dict[str, dict[str, Any]]) -
 
 
 def _empty_device_cache() -> None:
+    if "mlx.core" in sys.modules:  # MLX keeps freed Metal buffers in its own cache until told to drop them
+        with contextlib.suppress(Exception):
+            sys.modules["mlx.core"].clear_cache()
     if "torch" not in sys.modules:  # a GGUF or ONNX model never imported it; importing it now costs seconds
         return
     with contextlib.suppress(Exception):  # cache release is best effort
