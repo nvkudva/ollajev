@@ -7,7 +7,7 @@ Run System One decision models from Hugging Face on your machine, behind the sam
 
 <p align="center"><a href="https://nvkudva.github.io/ollajev/">Product page</a> · <a href="#install">Install</a> · <a href="#quick-start">Quick start</a> · <a href="#models">Models</a> · <a href="#api">API</a></p>
 
-<p align="center"><a href="https://nvkudva.github.io/ollajev/#new"><img src="https://raw.githubusercontent.com/nvkudva/ollajev/main/docs/vega-poster.jpg" alt="Ollajev 0.4: Vega reads the whole contract. Vega 0.8B is the new default, Vega 4B is one tag away, and Qwen3.5 models run 20-40x faster on the CPU" width="720"></a></p>
+<p align="center"><a href="https://nvkudva.github.io/ollajev/#new"><img src="https://raw.githubusercontent.com/nvkudva/ollajev/main/docs/vega-poster.jpg" alt="Ollajev 0.4: Vega reads the whole contract. Vega 0.8B is the new default and Vega 4B is one tag away. Install with brew install nvkudva/tap/ollajev" width="720"></a></p>
 
 > **New in 0.4:** [Vega](https://huggingface.co/nandakishorm/vega-08b-public-intents) is the default model: a
 > trained physics engine on a frozen Qwen3.5, in 0.8B (1.8 GB) and 4B (`:4b`, 9.5 GB) sizes, with a 73,728-token

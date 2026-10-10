@@ -389,7 +389,7 @@ const SHOTS = {
   vega: {
     src: "vega-poster.jpg",
     width: 3200, height: 1800,
-    alt: "Ollajev: Vega reads the whole contract. New in 0.4, Vega is the default: a trained physics engine on a frozen Qwen3.5, 73,728 tokens and an image in one pass. Cards for Vega 0.8B (default, 1.8 GB), Vega 4B (9.5 GB, the :4b tag) and 20-40x faster CPU inference for Qwen3.5 models.",
+    alt: "Ollajev: Vega reads the whole contract. New in 0.4, Vega is the default: a trained physics engine on a frozen Qwen3.5, 73,728 tokens and an image in one pass. Cards for Vega 0.8B (default, 1.8 GB) and Vega 4B (9.5 GB, the :4b tag), and the install command: brew install nvkudva/tap/ollajev.",
   },
   multimodal: {
     src: "multimodal-poster.jpg",
@@ -611,7 +611,6 @@ function Hero() {
 
 const NEW_IN_04 = [
   ["Vega, the new default", "nandakishorm/vega-08b-public-intents", html`A small trained physics engine on a frozen Qwen3.5, with a 73,728-token context and image input. 0.8B is 1.8 GB; add <code>:4b</code> for the 9.5 GB 4B.`],
-  ["20-40x faster on the CPU", "Qwen3.5 on PyTorch", html`Vega, decider, Intern-Decision, OneJev, Kev and JevK5 skip a slow CPU convolution: Vega 0.8B went from 4-8 s to 0.2 s a request.`],
   ["Errors that say what to do", "422 with guidance", html`A text-only model sent an image names your downloaded models that read images; idle models are unloaded when a new one needs the memory.`],
 ];
 
