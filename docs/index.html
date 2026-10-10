@@ -115,6 +115,10 @@ kbd { display: inline-grid; place-items: center; min-width: 28px; height: 28px; 
 .installs { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); max-width: 860px; margin-top: 40px; }
 @media (max-width: 860px) { .installs { margin-top: 28px; } }
 .hero .install figcaption { font-size: 14px; color: var(--muted); margin-bottom: 8px; }
+.hero .install.alt figcaption { font-size: 13px; margin-bottom: 6px; }
+.hero .install.alt .cmd { background: transparent; color: var(--muted); border: 1px solid var(--rule); padding: 7px 8px 7px 14px; font-size: 12.5px; border-radius: 10px; }
+.cmd-stack { display: grid; gap: 6px; }
+.hero .install.alt .copy { color: var(--muted); border-color: var(--rule); padding: 3px 9px; font-size: 11px; }
 @media (max-width: 860px) { .hero-grid { grid-template-columns: minmax(0, 1fr); gap: 28px; } .hero { padding-top: 52px; } }
 
 /* The one memorable element: a calibration scale where the answer lands */
@@ -389,7 +393,7 @@ const SHOTS = {
   vega: {
     src: "vega-poster.jpg",
     width: 3200, height: 1800,
-    alt: "Ollajev: Vega reads the whole contract. New in 0.4, Vega is the default: a trained physics engine on a frozen Qwen3.5, 73,728 tokens and an image in one pass. Cards for Vega 0.8B (default, 1.8 GB) and Vega 4B (9.5 GB, the :4b tag), and the install command: brew install nvkudva/tap/ollajev.",
+    alt: "Ollajev: Vega reads the whole contract. New in 0.4, Vega is the default: a trained physics engine on a frozen Qwen3.5, 73,728 tokens and an image in one pass. Cards for Vega 0.8B (default, 1.8 GB) and Vega 4B (9.5 GB, the :4b tag), and the commands to start: brew install nvkudva/tap/ollajev, ollajev pull and ollajev run nandakishorm/vega-08b-public-intents, or ollajev setup for the model manager.",
   },
   multimodal: {
     src: "multimodal-poster.jpg",
@@ -599,9 +603,16 @@ function Hero() {
         <figcaption>Install on macOS or Linux</figcaption>
         <${Command} text=${INSTALL["macOS / Linux"]} label="install command" />
       </figure>
-      <figure class="install">
+      <figure class="install alt">
         <figcaption>Or with Homebrew</figcaption>
         <${Command} text=${INSTALL.Homebrew} label="Homebrew install command" />
+      </figure>
+      <figure class="install alt">
+        <figcaption>Then run Vega, or open the model manager</figcaption>
+        <div class="cmd-stack">
+          <${Command} text="ollajev run nandakishorm/vega-08b-public-intents" label="run command" />
+          <${Command} text="ollajev setup" label="setup command" />
+        </div>
       </figure>
     </div>
     <${Screenshot} shot=${SHOTS.models}
