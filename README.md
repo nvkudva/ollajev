@@ -1,122 +1,67 @@
-<p align="center"><img src="https://raw.githubusercontent.com/nvkudva/ollajev/main/assets/logo.png" alt="Ollajev giraffe logo" width="140"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/nvkudva/ollajev/main/assets/logo.png" alt="Ollajev giraffe logo" width="120"></p>
 
-# Ollajev
+<h1 align="center">Ollajev</h1>
 
-> **Run Jev-style decision models on your machine.** Pull a System One model from Hugging Face and
-> call it through the same `/v1/systemone` API as TypeSafe's hosted Jev.
+<p align="center"><b>Like Ollama, for decision models.</b><br>
+Run System One decision models from Hugging Face on your machine, behind the same <code>/v1/systemone</code> API as TypeSafe's Jev.</p>
 
-**[Product page](https://nvkudva.github.io/ollajev/)** · [Install](#install) · [Quick start](#quick-start) · [Models](#models) · [API](#api)
+<p align="center"><a href="https://nvkudva.github.io/ollajev/">Product page</a> · <a href="#install">Install</a> · <a href="#quick-start">Quick start</a> · <a href="#models">Models</a> · <a href="#api">API</a></p>
 
-<p align="center"><a href="https://nvkudva.github.io/ollajev/#video"><img src="https://raw.githubusercontent.com/nvkudva/ollajev/main/docs/launch-poster.jpg" alt="Ollajev launch video: Like Ollama, for decision models" width="720"></a><br>
-<sub>▶ <a href="https://nvkudva.github.io/ollajev/#video">Watch the 53-second launch video</a>: the model manager, the Ollama-style commands, five models on one server and the playground.</sub></p>
+<p align="center"><a href="https://nvkudva.github.io/ollajev/#media"><img src="https://raw.githubusercontent.com/nvkudva/ollajev/main/docs/multimodal-poster.jpg" alt="Ollajev: decision models can now see and hear. Images, audio and video with Clef-Omni, d1-omni, and Clef on Apple Silicon" width="720"></a></p>
 
-A local server that runs **System One decision models** from Hugging Face behind TypeSafe's
-**Jev / System One** wire API.
-
-> **Already calling TypeSafe or Jev? This is a drop-in replacement.** Point `TYPESAFE_BASE_URL` at
-> this server and the stock `typesafe-sdk` keeps working: same routes, same request and response
-> shapes, no API key (unless you set `OLLAJEV_API_KEY`). The answers come from a model on your machine instead of the hosted service.
-
-- A decision model writes no text. You send one **state** and any number of typed **questions**.
-- You get back a probability for each question: `noul` (yes/no), `choice` (pick one option) or
-  `score` (expected level on an ordered rubric).
-- Models that read media also take **images, audio and video** beside the state: Clef-Omni, d1-omni,
-  and Clef on Apple Silicon through MLX (see [Images, audio and video](#images-audio-and-video)).
-- Pick a model with the request's `model` field. Models load on first use and unload when idle.
-- One command line to manage models: `serve`, `setup`, `run`, `pull`, `list`, `ps`, `show`, `rm`, `stop`, `cp`, `service` (see [Commands](#commands)).
-
-Ollajev is an independent project. It is not affiliated with or endorsed by Ollama or TypeSafe.
+- **No generated text.** Send one state and any number of typed questions; get a calibrated probability for each, in one forward pass.
+- **Images, audio and video** beside the state, with Clef-Omni, d1-omni, and Clef on Apple Silicon through MLX.
+- **Ollama-style workflow:** `pull`, `list`, `run`, `serve`, `ps`, `rm`, plus a terminal model manager and a browser playground.
+- **Drop-in for `typesafe-sdk`:** point `TYPESAFE_BASE_URL` at it; same routes, same request and response shapes.
 
 ## Install
 
-macOS and Linux:
-
 ```sh
-curl -fsSL https://raw.githubusercontent.com/nvkudva/ollajev/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/nvkudva/ollajev/main/install.sh | sh   # macOS, Linux
+brew install nvkudva/tap/ollajev                                                    # Homebrew
+uv tool install ollajev                                                             # PyPI
 ```
 
-Homebrew (macOS and Linux):
+Windows (PowerShell): `irm https://raw.githubusercontent.com/nvkudva/ollajev/main/install.ps1 | iex`
 
-```sh
-brew install nvkudva/tap/ollajev
-```
+- llama.cpp is compiled during the install: macOS needs the Xcode Command Line Tools (`xcode-select --install`), Linux a C/C++ compiler (`sudo apt install build-essential`). The script checks both.
+- Add `-s -- --service` to the script (or run `brew services start ollajev`) to keep the server running at login.
+- With `uv` on Linux, add `--index https://download.pytorch.org/whl/cpu`, or PyPI's PyTorch brings several GB of CUDA libraries.
 
-Windows (PowerShell):
-
-```powershell
-irm https://raw.githubusercontent.com/nvkudva/ollajev/main/install.ps1 | iex
-```
-
-- The script installs [uv](https://docs.astral.sh/uv/) if it is missing, then installs `ollajev`
-  as a command in its own Python 3.12 environment (`uv tool install`).
-- Add `--service` (`… | sh -s -- --service`) to also run the server in the background at every
-  login: a launchd agent on macOS, a systemd user unit on Linux.
-- On Linux, llama.cpp is compiled during the install, so a C and C++ compiler must be present:
-  `sudo apt install build-essential` on Debian and Ubuntu, `sudo dnf install gcc gcc-c++` on Fedora.
-  The script checks and says so. On macOS the same build needs the Xcode Command Line Tools
-  (`xcode-select --install`); the script checks that they can compile C++. Linux gets the CPU build of PyTorch; for an NVIDIA GPU, see `pyproject.toml`.
-- Already have uv? `uv tool install ollajev` installs it from PyPI. On Linux, add
-  `--index https://download.pytorch.org/whl/cpu`; without it PyPI's PyTorch brings the CUDA libraries,
-  several GB. The script above takes the CPU build by itself.
-- With Homebrew, `brew services start ollajev` runs the server in the background at login. Use that
-  or `ollajev service install`, not both. `brew uninstall ollajev` removes it.
-- To remove it, see [Uninstall](#uninstall).
-
-## Uninstall
-
-macOS and Linux:
+<details>
+<summary>Uninstall</summary>
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/nvkudva/ollajev/main/install.sh | sh -s -- --uninstall
 ```
 
-Windows (PowerShell):
-
-```powershell
-irm https://raw.githubusercontent.com/nvkudva/ollajev/main/install.ps1 -OutFile install.ps1
-.\install.ps1 -Uninstall
-```
-
-- This stops and removes the background service, if installed, and removes the `ollajev` command.
-- Installed with uv directly? Run `ollajev service uninstall`, then `uv tool uninstall ollajev`.
-- Your config, logs and downloaded models are kept. To remove them too, delete these folders:
-
-| | Path |
-|---|---|
-| Config and logs | `~/.ollajev` |
-| Models | `~/.cache/huggingface/hub/models--<user>--<repo>` |
-
-The models folder is the shared Hugging Face cache, which other tools use too. Delete only the
-`models--…` folders of the models you pulled (`ollajev list` shows them), or run `ollajev rm <model>`
-for each one before uninstalling.
+With Homebrew: `brew uninstall ollajev`. With uv: `ollajev service uninstall; uv tool uninstall ollajev`.
+Config and logs stay in `~/.ollajev`; models stay in the Hugging Face cache (`ollajev rm <model>` first to free them).
+</details>
 
 ## Quick start
 
 ```sh
-ollajev            # first run: opens the model manager; pick a model, press Enter, then s to serve
-ollajev serve      # start the server with the default model; opens the playground
+ollajev           # first run opens the model manager: pick a model, Enter to download, s to serve
+ollajev serve     # serve the default model and open the playground
 ```
 
-- The model manager lists the curated models, and `a` searches Hugging Face for any other. Run
-  `ollajev setup` (or `ollajev tui`) to open it again.
-- The playground opens at <http://127.0.0.1:8000/playground>. It lets you play with requests: pick
-  any downloaded model, load an example or write your own state and questions, send it, and compare
-  the answers across models in the log. `w` in the model manager opens it too.
+The playground at <http://127.0.0.1:8000/playground> lets you pick or download a model, write a state and questions, attach an image, audio clip or video, and compare answers across models.
 
-![The Ollajev model manager: a list of decision models with their status, size, runtime and language, and a Selected panel with Serve, Delete and Info buttons](https://raw.githubusercontent.com/nvkudva/ollajev/main/assets/model-manager.png)
-
-![The Ollajev playground: a model picker, a request editor with a state and typed questions, and a log of answers from two different models with probability bars](https://raw.githubusercontent.com/nvkudva/ollajev/main/docs/playground.png)
+![The Ollajev playground: a model picker, a request editor with a state and typed questions, and a log of answers with probability bars](https://raw.githubusercontent.com/nvkudva/ollajev/main/docs/playground.png)
 
 ## Example
 
 ```sh
 curl -s http://127.0.0.1:8000/v1/systemone -H 'content-type: application/json' -d '{
   "state": "I was charged twice for the same order and nobody answers my emails. I want my money back now.",
-  "model": "Mapika/decider-4b-GGUF:Q4_K_M",
   "questions": {
-    "area":    {"type":"choice","instructions":"Which product area is this about?","criteria":{"refund & dispute":"A billing dispute or refund request","card":"Anything about a card","other":null}},
-    "urgency": {"type":"score","instructions":"How urgent is this message?","criteria":["Can wait","Needs attention this week","Needs attention today"]},
-    "refund":  {"type":"noul","instructions":"The customer is asking for a refund."}
+    "area":    {"type": "choice", "instructions": "Which product area is this about?",
+                "criteria": {"refund & dispute": "A billing dispute or refund request", "card": "Anything about a card",
+                             "other": null}},
+    "urgency": {"type": "score", "instructions": "How urgent is this message?",
+                "criteria": ["Can wait", "Needs attention this week", "Needs attention today"]},
+    "refund":  {"type": "noul", "instructions": "The customer is asking for a refund."}
   }
 }'
 ```
@@ -125,207 +70,21 @@ curl -s http://127.0.0.1:8000/v1/systemone -H 'content-type: application/json' -
 {
   "model": "Mapika/decider-4b-GGUF:Q4_K_M",
   "answers": {
-    "area":    {"type":"choice","choice":"refund & dispute","confidence":0.9642,
-                "probabilities":{"refund & dispute":0.9761,"card":0.0104,"other":0.0135}},
-    "urgency": {"type":"score","score":1.712,"confidence":0.568,
-                "legend":{"0":"Can wait","1":"Needs attention this week","2":"Needs attention today"},
-                "probabilities":{"0":0.0099,"1":0.2682,"2":0.7219}},
-    "refund":  {"type":"noul","noul":0.9433,"confidence":0.8866}
+    "area":    {"type": "choice", "choice": "refund & dispute", "confidence": 0.9642,
+                "probabilities": {"refund & dispute": 0.9761, "card": 0.0104, "other": 0.0135}},
+    "urgency": {"type": "score", "score": 1.712, "confidence": 0.568,
+                "probabilities": {"0": 0.0099, "1": 0.2682, "2": 0.7219}},
+    "refund":  {"type": "noul", "noul": 0.9433, "confidence": 0.8866}
   },
   "usage": {"input_tokens": 198, "output_tokens": 0}
 }
 ```
 
-With the default model this request took about 0.4 s warm (0.7 s for the first one) on an Apple
-M3 Max laptop: three answers from one forward pass, no tokens generated.
-
-Leave `model` out, or send `jev-latest` (typesafe-sdk's default), to use the default model.
-
-## Models
-
-A model name is its Hugging Face repo id: `<user>/<repo>`. Repos with several quantized files take a
-tag: `<user>/<repo>:<quant>` (case-insensitive) or `<user>/<repo>:<file.gguf>`. Without a tag,
-Q4_K_M is used. An `hf.co/` or `huggingface.co/` prefix is accepted and ignored.
-
-The model manager lists these:
-
-| Model | Download | Runs on | Languages | Limits |
-|---|---|---|---|---|
-| `Mapika/decider-4b-GGUF:Q4_K_M` (default) | 2.7 GB | llama.cpp (Metal) | English | 255 options, 10 levels, 32k tokens |
-| `Mapika/decider-2b-GGUF:Q4_K_M` | 1.2 GB | llama.cpp | English | same |
-| `Mapika/decider-2b-GGUF:Q8_0` | 2.0 GB | llama.cpp | English | same |
-| `Mapika/decider-2b` | 3.8 GB | PyTorch | English | same |
-| `Mapika/decider-0.8b` | 1.5 GB | PyTorch | English | same |
-| `convaiinnovations/laya` | 0.85 GB | PyTorch | English | 512 tokens |
-| `convaiinnovations/laya-multilingual` | 0.68 GB | PyTorch | 100+ | 1024 tokens |
-| `convaiinnovations/laya-typed-decisions` | 0.85 GB | PyTorch | English | 1024 tokens |
-| `SupersonicLabs/Julia-1` | 0.57 GB | PyTorch (CPU) | Multilingual | **2–20 options**, 8k tokens |
-| `com-kotobalabs/open-jev-deberta-v3-large` | 1.7 GB | PyTorch | English | **512 tokens** |
-| `jaredpalmer/kev-0.5b`, `kev-0.6b`, `kev-0.8b` | 1–1.7 GB with base | PyTorch | English | 255 options, 8k tokens |
-| `jaredpalmer/kev-4b`, `kev-9b` | 9.5 / 19.5 GB with base | PyTorch | English | same |
-| `internlm/Intern-Decision-0.8B`, `-2B`, `-4B` | 1.7 / 4.5 / 9.1 GB | PyTorch | Multilingual | 62 options, 16 questions |
-| `llm-semantic-router/Decision-1.0-Kai-0.6B`, `-Lex-0.6B` | 2.3 GB | PyTorch | English | 255 options, **1024 tokens** |
-| `wfzyx/von` | 1.6 GB | PyTorch | English | 10 levels, 8k tokens |
-| `heman10x/rlcd-modernbert-151m` | 0.7 GB | PyTorch | English | **24 options**, **512 tokens** |
-| `alibiserikbay/JevK5`, `JevK5-2B` | 8.4 / 3.8 GB | PyTorch (llama.cpp for GGUF copies) | English | 255 options, 16 levels, 16k tokens |
-| `OmniJev/OneJev-0.8B`, `-4B` | 2.2 / 10.4 GB | PyTorch (llama.cpp for GGUF copies) | Multilingual | 255 options, 10 levels, 32k tokens |
-| `Cloudflare/clef-flash`, `clef` | 19.1 / 55 GB | PyTorch | Multilingual | 255 options, 16k tokens; reads images, video |
-| `Cloudflare/clef-omni` | 71 GB | PyTorch | Multilingual | 255 options, 64k tokens; reads images, audio, video |
-| `mlx-community/clef-flash-4bit`, `-8bit` | 6.2 / 10.7 GB | MLX (Apple Silicon only) | Multilingual | same as clef-flash; images **or** videos per request |
-| `mlx-community/clef-4bit`, `-8bit` | 16.3 / 29.8 GB | MLX (Apple Silicon only) | Multilingual | same as clef; images **or** videos per request |
-| `mlx-community/clef-omni-4bit`, `-8bit` | 19.8 / 35 GB | MLX (Apple Silicon only) | Multilingual | same as clef-omni; ~0.2–0.6 s per request on an M-series Mac with 32 GB+ |
-| `LiquidAI/d1-omni-600M` | 2.35 GB | PyTorch | Multilingual (audio: English) | 10 levels, 16k tokens; reads images **or** one 30 s audio clip |
-
-Any other repo works when it belongs to one of these families (decider, laya, julia, open-jev, kev,
-intern-decision, decision1, d1, von, rlcd, jevk5, onejev, clef, clef-mlx), for example a fine-tune or a bigger size. Requests over a model's
-limits get a 422 before the model runs. `ollajev show <model>` prints them.
-
-### Download, switch and remove models
-
-```sh
-ollajev list                                  # what is downloaded; * marks the default
-ollajev pull SupersonicLabs/Julia-1           # download a model (any name from the table)
-ollajev pull Mapika/decider-2b-GGUF:Q8_0      # download one quantized file
-```
-
-To use a different model:
-
-| You want | Do this |
-|---|---|
-| Another model for one request | send `"model": "<name>"` in the `/v1/systemone` body; it loads on first use |
-| Another default model | `ollajev setup`, move to a model, press Enter (it downloads if needed and becomes the default), then `s` to serve. A server that is already running picks up the saved default for requests that omit `model` |
-| Serve a model once, without changing the default | `ollajev serve <name>` |
-| Ask a model from the terminal | `ollajev run <name>` |
-| A short name for a long one | `ollajev cp <name> julia`, then send `"model": "julia"` (aliases are saved in lower case and matched ignoring case) |
-| Free memory now | `ollajev stop <name>` (idle models also unload after `OLLAJEV_KEEP_ALIVE`) |
-| Free disk space | `ollajev rm <name>` |
-
-A model must be downloaded before a request can use it; requests never download. Only
-`OLLAJEV_MAX_LOADED_MODELS` models (default 1) stay in memory, so asking for a second model unloads the
-first.
-
-### Repo code and trust
-
-Julia, open-jev, Intern-Decision and Decision-1.0 run Python code shipped in the model repo, with
-your user's privileges. The first `pull` of such a repo shows the commit and its code files and
-asks you to trust that exact commit (`--trust` skips the question). Every repo is pinned to the
-commit of its first download and never updates by itself.
-
-kev's loader is vendored from GitHub at a pinned commit (`ollajev/_vendor/kev`), and its `head.pt`
-is loaded with `torch.load(weights_only=True)`, so the file cannot run code.
-
-Trust is a CLI decision only: `POST /api/pull` never trusts a repo, so a network client cannot
-make the server run new code. See [SECURITY.md](SECURITY.md).
-
-### Network exposure
-
-The server listens on `127.0.0.1` and accepts only `localhost`, `127.0.0.1` and `[::1]` as Host,
-which blocks DNS-rebinding from a web page. To listen elsewhere, set a key; without one the server
-refuses to start:
-
-```sh
-OLLAJEV_API_KEY=$(openssl rand -hex 24) OLLAJEV_HOST=0.0.0.0:8000 ollajev serve
-export TYPESAFE_API_KEY=<the same key>
-```
-
-With a key set, `/v1/*` and `/api/*` need `Authorization: Bearer <key>`; the playground cannot
-send one, so use it without a key. Put TLS in front (a reverse proxy) before exposing it beyond a LAN.
-
-## Commands
-
-Run `ollajev <command> --help` for options and an example.
-
-### Model manager
-
-`ollajev setup` opens one screen for the model commands. Move with the arrow keys or the mouse. The Selected panel under the list shows the model at the cursor and buttons for what applies to it: Download for a model not on disk yet, then Serve, Default, Unload and Delete, and Info. The status row at the bottom lists the keys for that model. The menu bar at the top (Add, Filter, Settings, Quit) can be clicked or used with its keys. Every button shows its key in brackets before its label. Serve starts the server right there: a Server panel shows its address and model, with Playground, Logs, Restart and Stop; quitting the manager stops it. Logs follows the server log in a new terminal tab. The buttons in every dialog can be clicked too. The keys:
-
-| Key | Same as | What it does |
-|---|---|---|
-| Enter | `pull` + default | download the model if needed (it asks first, with the size) and make it the default |
-| `d` | | make a downloaded model the default |
-| `p` | `pull` | download only |
-| `u` | `stop` | unload it from memory |
-| `x` | `rm` | delete the download |
-| `c` | `cp` | give it a short name |
-| `i` | `show` | family, commit, limits, path |
-| `a` | `pull` | add any Hugging Face repo by name |
-| `w` | | open the playground of the running server |
-| `l` | | follow the server logs in a new terminal tab |
-| `o` | | settings: device, address, port, how long an idle model stays loaded, models in memory; saved in `~/.ollajev/config.json` |
-| `b` | `service` | install or remove the background service |
-| `s` | `serve` | serve the selected model: it becomes the default, and the server starts or restarts with it |
-| `R` | | restart the server |
-| `S` | | stop the server |
-| `f` | | filter the list by name |
-| Ctrl+R | | refresh the list |
-| `e` | | the last error in full |
-| Esc | | cancel a download |
-| `?` | | list every key |
-| `q` | | quit |
-
-The Status column shows `default`, `loaded`, `downloaded` and `available` labels; a dimmed size is an estimate until the model
-is downloaded. The colours are your terminal's own: its background and its colour palette, so the screen follows
-whatever theme the terminal uses.
-
-### All commands
-
-| Command | What it does |
-|---|---|
-| `ollajev` | start the server; the first run opens setup |
-| `ollajev serve [model]` | start the server. Options: `--host`, `--port`, `--no-browser`, `--log-file` |
-| `ollajev setup` (`tui`) | open the model manager (below) |
-| `ollajev run [model]` | ask questions from the terminal |
-| `ollajev pull <model>… [--trust]` | download models; `--trust` skips the repo-code question |
-| `ollajev list` (`ls`) | downloaded models, family, size and date; `*` marks the default |
-| `ollajev ps` | models loaded in memory, device and unload time |
-| `ollajev show <model>` | family, pinned commit, file, limits and local path |
-| `ollajev rm <model>…` | delete a download (one quant of a GGUF repo, or the whole repo) or an alias |
-| `ollajev stop <model>` | unload a model from memory now |
-| `ollajev cp <source> <name>` | give a model a short name |
-| `ollajev service install` | run the server in the background at login (macOS launchd, Linux systemd) |
-| `ollajev service uninstall` | stop and remove that service |
-| `ollajev service status` | show whether the service is running |
-| `ollajev service logs` | follow the server log |
-| `ollajev --version` | print the version |
-
-`ps`, `stop` and `rm` talk to the running server when there is one. `list`, `show`, `pull` and `cp`
-work with no server running. Environment variables are listed under [Configuration](#configuration).
-
-`run` uses the running server, or loads the model in its own process when none is running:
-
-```
-state> I was charged twice for order 8841 and want a refund.
-q1> noul: The customer asks for a refund.
-q2> choice: Which team? | billing, support, sales
-q3>
-  q1         noul    0.943
-  q2         choice  billing   (billing 0.95  support 0.03  sales 0.02)
-```
-
-## API
-
-- **Jev / System One:** `GET /v1/models`, `POST /v1/systemone`. Bearer headers are ignored
-  unless `OLLAJEV_API_KEY` is set.
-- **Model management:** `GET /api/tags`, `GET /api/ps`, `POST /api/pull`
-  (`{"model", "stream"}`, NDJSON progress), `POST /api/show`, `DELETE /api/delete`,
-  `POST /api/copy`, `POST /api/stop`.
-- **Playground:** `/playground` lets you play with requests on different models. Pick any downloaded
-  model, start from one of five ready-made examples or write your own state and `noul`, `choice` and
-  `score` questions, edit them as a form or as JSON, and send. Each answer lands in a log with its
-  probabilities, confidence and timing, so you can rerun the same request on another model and compare.
-  It shows each model's limits and copies any request as a `curl` command. The model picker also lists
-  every curated model not downloaded yet; pick one and press Download to fetch it from the page. Models
-  that run repo code still need `ollajev pull <model> --trust` in a terminal, and the page says so. `/ui/presets` serves the
-  examples; the old `/demo` address redirects here.
+About 0.4 s on an M3 Max. Question types: `noul` (yes/no), `choice` (pick one), `score` (expected level on an ordered scale). Leave `model` out to use the default; send `"model": "<name>"` to use another.
 
 ### Images, audio and video
 
-Models that read media take optional `images`, `audio` and `videos` lists in the `/v1/systemone` body,
-each item a base64 data URL. `GET /v1/models` lists what each model reads in `limits.inputs`; media a
-model cannot read gets a 422. URLs and file paths are refused, so a request can never make the server
-fetch an address or read a local file. Audio is resampled to 16 kHz mono; video is sampled at 2 frames
-per second, and clef-omni also hears its soundtrack. Videos longer than 5 minutes are refused. Media a model
-cannot read is refused before the model loads.
+Add `images`, `audio` or `videos` as base64 data URLs:
 
 ```sh
 curl -s http://127.0.0.1:8000/v1/systemone -H 'content-type: application/json' -d '{
@@ -337,75 +96,112 @@ curl -s http://127.0.0.1:8000/v1/systemone -H 'content-type: application/json' -
 }'
 ```
 
-The playground shows a media picker for models that read media.
+`GET /v1/models` lists what each model reads in `limits.inputs`. URLs and file paths are refused, so a request never makes the server fetch or read anything. Video is sampled at 2 fps and capped at 5 minutes.
 
-Every error is `{"detail": [{"loc", "msg", "type"}]}`: 404 `model_not_found`, 403
-`model_not_trusted`, 422 for an invalid request or one over the model's limits.
+## Models
 
-Confidence uses TypeSafe's formulas for every model, so it means the same thing whichever model
-answered: choice `(n·p_max − 1)/(n − 1)`, score one minus the normalised expected distance from the
-most likely level, noul the same as a two-option choice.
+A model name is its Hugging Face repo id. GGUF repos take a quant tag (`user/repo:Q8_0`; Q4_K_M by default).
+
+| Model | Size | Runs on | Reads |
+|---|---|---|---|
+| `Mapika/decider-4b-GGUF:Q4_K_M` (default) | 2.7 GB | llama.cpp | text |
+| `Mapika/decider-2b-GGUF:Q4_K_M`, `:Q8_0` | 1.2 / 2.0 GB | llama.cpp | text |
+| `Mapika/decider-2b`, `decider-0.8b` | 3.8 / 1.5 GB | PyTorch | text |
+| `convaiinnovations/laya`, `laya-multilingual`, `laya-typed-decisions` | 0.7–0.9 GB | PyTorch | text |
+| `SupersonicLabs/Julia-1` | 0.6 GB | PyTorch (CPU) | text, 2–20 options |
+| `com-kotobalabs/open-jev-deberta-v3-large` | 1.7 GB | PyTorch | text, 512 tokens |
+| `jaredpalmer/kev-0.5b` … `kev-9b` | 1–19.5 GB | PyTorch | text |
+| `internlm/Intern-Decision-0.8B`, `-2B`, `-4B` | 1.7–9.1 GB | PyTorch | text |
+| `llm-semantic-router/Decision-1.0-Kai-0.6B`, `-Lex-0.6B` | 2.3 GB | PyTorch | text, 1024 tokens |
+| `wfzyx/von`, `heman10x/rlcd-modernbert-151m` | 1.6 / 0.7 GB | PyTorch | text |
+| `alibiserikbay/JevK5`, `JevK5-2B` | 8.4 / 3.8 GB | PyTorch | text |
+| `OmniJev/OneJev-0.8B`, `-4B` | 2.2 / 10.4 GB | PyTorch | text |
+| `LiquidAI/d1-omni-600M` | 2.35 GB | PyTorch | text + images **or** a 30 s voice clip |
+| `mlx-community/clef-flash-4bit`, `-8bit` | 6.2 / 10.7 GB | MLX (Apple Silicon) | text, images, video |
+| `mlx-community/clef-4bit`, `-8bit` | 16.3 / 29.8 GB | MLX (Apple Silicon) | text, images, video |
+| `mlx-community/clef-omni-4bit`, `-8bit` | 19.8 / 35 GB | MLX (Apple Silicon) | text, images, audio, video |
+| `Cloudflare/clef-flash`, `clef`, `clef-omni` | 19–71 GB | PyTorch | text, images, video (+ audio for omni) |
+
+Any other repo from these families works too, such as a fine-tune: press `a` in the manager or `ollajev pull user/repo`. `ollajev show <model>` prints a model's limits; requests over them get a 422.
+
+## Commands
+
+| Command | What it does |
+|---|---|
+| `ollajev` | start the server (the first run opens the model manager) |
+| `ollajev setup` | open the model manager |
+| `ollajev serve [model]` | start the server (`--host`, `--port`, `--no-browser`) |
+| `ollajev run [model]` | ask questions from the terminal |
+| `ollajev pull <model> [--trust]` | download a model |
+| `ollajev list` · `ps` · `show <model>` | downloaded models · loaded models · details and limits |
+| `ollajev stop <model>` · `rm <model>` | unload from memory · delete the download |
+| `ollajev cp <model> <alias>` | give a model a short name |
+| `ollajev service install` | run the server in the background at login (launchd, systemd) |
+
+Run `ollajev <command> --help` for options. Models load on first request and unload after `OLLAJEV_KEEP_ALIVE`.
+
+<details>
+<summary>Model manager keys</summary>
+
+| Key | What it does |
+|---|---|
+| Enter | download if needed and make default |
+| `s` | serve the selected model |
+| `p` · `x` · `u` | download · delete · unload |
+| `d` · `c` · `i` | make default · short name · info |
+| `a` | add any Hugging Face repo |
+| `w` · `l` | open the playground · follow the server log |
+| `o` | settings: device, address, port, keep-alive, models in memory |
+| `f` · `?` · `q` | filter · all keys · quit |
+</details>
+
+## API
+
+| Route | Purpose |
+|---|---|
+| `POST /v1/systemone` | answer questions about a state (Jev / System One wire format) |
+| `GET /v1/models` | downloaded models, with limits and readable inputs |
+| `GET /api/tags` · `/api/ps` | downloaded · loaded models (Ollama style) |
+| `POST /api/pull` · `/api/show` · `/api/copy` · `/api/stop`, `DELETE /api/delete` | manage models; `pull` streams NDJSON progress |
+| `/playground` | the browser playground |
+
+Errors are `{"detail": [{"loc", "msg", "type"}]}`: 404 model not downloaded, 403 not trusted, 422 invalid or over the model's limits, 503 not enough memory. Confidence uses TypeSafe's formulas, so it means the same thing for every model.
 
 ## Configuration
 
-The model manager's Settings (`o`) saves the device, address, port, keep-alive and models in memory to
-`~/.ollajev/config.json`. An environment variable below overrides the saved value.
+Settings (`o` in the manager) are saved to `~/.ollajev/config.json`; environment variables override them.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `OLLAJEV_HOST` | `127.0.0.1:8000` | bind address for `serve`, and where the other commands look for it |
-| `OLLAJEV_KEEP_ALIVE` | `5m` | how long an idle model stays loaded (`300`, `5m`, `1h`, `-1` = forever) |
-| `OLLAJEV_MAX_LOADED_MODELS` | `1` | models in memory at once; the least recently used one unloads |
+| `OLLAJEV_HOST` | `127.0.0.1:8000` | bind address |
+| `OLLAJEV_KEEP_ALIVE` | `5m` | idle time before a model unloads (`-1` = never) |
+| `OLLAJEV_MAX_LOADED_MODELS` | `1` | models in memory at once |
+| `OLLAJEV_DEVICE` | best available | `cpu`, `mps` or `cuda` |
 | `OLLAJEV_MODELS` | Hugging Face cache | where weights are stored |
-| `OLLAJEV_DEVICE` | best available | force `cpu`, `mps` or `cuda` |
-| `OLLAJEV_HOME` | `~/.ollajev` | config (default model, pins, trusted commits, aliases) and `logs/` |
-| `OLLAJEV_MAX_BODY_BYTES` | `67108864` | largest request body the API accepts (413 above it) |
-| `OLLAJEV_API_KEY` | none | bearer token every API call must send; required to listen on a non-loopback address |
+| `OLLAJEV_API_KEY` | none | bearer token; required to listen beyond localhost |
+| `OLLAJEV_MAX_BODY_BYTES` | 64 MiB | largest request body |
 
-The model `serve` preloads stays loaded until the server stops.
+## Security
 
-Config is `~/.ollajev/config.json`, logs are `~/.ollajev/logs/server.log`, and weights live in the
-shared Hugging Face cache (`~/.cache/huggingface/hub`). A config left by 0.1 in the old OS folder
-is read once and moved on the next save.
+- **Local by default.** The server binds to `127.0.0.1` and checks the Host header against DNS rebinding. Listening elsewhere requires `OLLAJEV_API_KEY`; put TLS in front before exposing it beyond a LAN.
+- **Repo code needs your trust.** Julia, open-jev, Intern-Decision, Decision-1.0 and d1 run Python from their repo. The first `pull` shows the commit and asks you to trust it; trust is CLI-only, never over HTTP. Every repo is pinned to its first-downloaded commit.
+- See [SECURITY.md](SECURITY.md).
 
 ## Known limits
 
-- Before a load, Ollajev checks that the weights fit in free memory and answers 503 when they do not.
-  The check counts weights plus 10%, so a long request can still run out of memory.
-- Requests to one model run one at a time. On Apple GPUs concurrent forwards crash the process.
-- Julia-1 runs on CPU (its runtime does not move inputs to the Apple GPU); it is fast there.
-- d1-omni-600M is under the LFM Open License v1.0: commercial use is licensed only for organisations
-  under 10 million USD annual revenue.
-- clef-omni needs about 64 GB of GPU memory in bfloat16; it was not run end to end here, only its
-  media encoding. On a Mac, use `mlx-community/clef-omni-4bit` (or `-8bit`) instead.
-- The 8-bit MLX copies share the 4-bit copies' runtime but were not run here.
-- Decision-1.0 Kai returned near-uniform `score` distributions in our tests; its `choice` and
-  `noul` answers, and Lex's scores, look normal. The cause is not known yet.
+- Requests to one model run one at a time (concurrent forwards crash on Apple GPUs).
+- Before a load, free memory is checked against the weights plus 10%; a very long request can still run out.
+- `Cloudflare/clef-omni` needs about 64 GB of GPU memory; on a Mac use `mlx-community/clef-omni-4bit`. The 8-bit MLX copies were not tested.
+- d1-omni-600M is under the LFM Open License v1.0: commercial use only for organisations under 10M USD annual revenue.
 
 ## Development
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). In short:
-
 ```sh
-uv sync
-uv run ollajev --help
-uv run pytest
+uv sync && uv run pytest
 ```
 
-## How it compares to Ollama
-
-Ollajev follows Ollama's workflow (pull, list, run, serve) for a different kind of model.
-
-| | Ollama | Ollajev |
-|---|---|---|
-| Runs | chat and text-generation LLMs | System One decision models (Jev-style) |
-| Answers with | generated text | probabilities for typed questions, one forward pass |
-| Models from | ollama.com library, Hugging Face GGUF | Hugging Face (decider, laya, Julia, kev, …) |
-| Model names | `hf.co/user/repo:Q4_K_M` | `user/repo:Q4_K_M`, same tag rules |
-| Commands | `serve`, `run`, `pull`, `list`, `ps`, `show`, `rm`, `stop`, `cp` | the same |
-| API | OpenAI-compatible `/v1/chat/completions` | Jev-compatible `/v1/systemone` |
-| Background | menu-bar app / systemd service | `ollajev service install` (launchd / systemd) |
+See [CONTRIBUTING.md](CONTRIBUTING.md) and the [Changelog](CHANGELOG.md).
 
 ## License
 
-Apache-2.0. kev's loader is vendored under its Apache-2.0 license; see [NOTICE](NOTICE).
+Apache-2.0. Vendored loaders keep their own licenses; see [NOTICE](NOTICE). Ollajev is an independent project, not affiliated with Ollama or TypeSafe.
