@@ -133,7 +133,7 @@ def test_install_sh_on_linux_without_a_compiler_says_what_to_install(tmp_path):
 @pytest.mark.skipif(sys.platform == "win32", reason="install.sh is for macOS and Linux")
 @pytest.mark.parametrize(
     ("tools_installed", "expected"),
-    [(False, "needs the Xcode Command Line Tools"), (True, "cannot compile C++ (headers missing)")],
+    [(False, "needs the Xcode Command Line Tools"), (True, "cannot build a test program")],
 )
 def test_install_sh_on_macos_without_working_command_line_tools_says_what_to_do(tmp_path, tools_installed, expected):
     import shutil
@@ -141,11 +141,16 @@ def test_install_sh_on_macos_without_working_command_line_tools_says_what_to_do(
 
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
-    stubs = {"uname": "echo Darwin", "c++": "exit 1", "xcode-select": "exit 0" if tools_installed else "exit 2"}
+    stubs = {
+        "uname": "echo Darwin",
+        "cc": "exit 1",
+        "c++": "exit 1",
+        "xcode-select": "exit 0" if tools_installed else "exit 2",
+    }
     for name, body in stubs.items():
         (bin_dir / name).write_text(f"#!/bin/sh\n{body}\n")
         (bin_dir / name).chmod(0o755)
-    for tool in ("dirname", "grep", "sed", "cat"):
+    for tool in ("dirname", "grep", "sed", "cat", "mktemp", "rm", "tail"):
         (bin_dir / tool).symlink_to(shutil.which(tool))
     root = Path(__file__).resolve().parent.parent
     result = subprocess.run(  # noqa: S603 our own install script, fixed arguments
