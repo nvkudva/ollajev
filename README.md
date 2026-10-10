@@ -20,6 +20,8 @@ A local server that runs **System One decision models** from Hugging Face behind
 - A decision model writes no text. You send one **state** and any number of typed **questions**.
 - You get back a probability for each question: `noul` (yes/no), `choice` (pick one option) or
   `score` (expected level on an ordered rubric).
+- Models that read media also take **images, audio and video** beside the state: Clef-Omni, d1-omni,
+  and Clef on Apple Silicon through MLX (see [Images, audio and video](#images-audio-and-video)).
 - Pick a model with the request's `model` field. Models load on first use and unload when idle.
 - One command line to manage models: `serve`, `setup`, `run`, `pull`, `list`, `ps`, `show`, `rm`, `stop`, `cp`, `service` (see [Commands](#commands)).
 
@@ -368,8 +370,8 @@ is read once and moved on the next save.
 
 ## Known limits
 
-- There is no size limit, but nothing checks free memory before a load: a model bigger than your RAM
-  (or GPU memory) fails or swaps heavily.
+- Before a load, Ollajev checks that the weights fit in free memory and answers 503 when they do not.
+  The check counts weights plus 10%, so a long request can still run out of memory.
 - Requests to one model run one at a time. On Apple GPUs concurrent forwards crash the process.
 - Julia-1 runs on CPU (its runtime does not move inputs to the Apple GPU); it is fast there.
 - d1-omni-600M is under the LFM Open License v1.0: commercial use is licensed only for organisations
