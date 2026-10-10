@@ -136,24 +136,31 @@ select { width: auto; }
 
 /* --- 4. instrument bar -------------------------------------------------- */
 
-.bar { flex: none; border-bottom: 1px solid var(--rule); background: var(--surface); padding: 14px 16px 12px; }
-.bar-inner { max-width: 1680px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 20px 32px; align-items: baseline; }
-.bar-head { flex: 999 1 720px; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
-.bar-title { display: flex; align-items: center; gap: 14px; }
+.bar { flex: none; border-bottom: 1px solid var(--rule); background: var(--surface); padding: 14px 16px; }
+.bar-inner { max-width: 1680px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 16px 40px; align-items: center; }
+.bar-head { flex: 999 1 720px; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.bar-title { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .lockup {
-  flex: none; display: inline-flex; align-items: center; gap: 8px; color: var(--ink);
-  font-weight: 600; font-size: 24px; letter-spacing: 0.01em;
+  flex: none; display: inline-flex; align-items: center; gap: 9px; color: var(--ink);
+  font-weight: 600; font-size: 20px; letter-spacing: -0.01em;
 
-  & img { border-radius: 8px; }
+  & img { border-radius: 7px; }
 }
-.wordmark { font-weight: 600; font-size: 19px; letter-spacing: -0.015em; margin: 0; }
-.bar-copy { min-width: 0; }
+.bar-sep { width: 1px; height: 18px; background: var(--rule); }
+.wordmark { font-weight: 500; font-size: 15px; color: var(--muted); letter-spacing: 0; margin: 0; }
 
 .tagline {
-  color: var(--muted); font-size: 13px; max-width: 118ch; margin: 4px 0 0; line-height: 1.55;
+  color: var(--muted); font-size: 12.5px; max-width: 110ch; margin: 0; line-height: 1.5;
 
-  & a { color: var(--signal); }
-  & b { font-family: var(--mono); font-weight: 400; color: var(--ink); }
+  & a { color: var(--signal); text-decoration: none; }
+  & a:hover { text-decoration: underline; }
+  & b { font-family: var(--mono); font-weight: 500; color: var(--ink); }
+}
+.qtypes {
+  display: flex; flex-wrap: wrap; gap: 6px;
+
+  & span { border: 1px solid var(--rule); border-radius: 2px; padding: 1px 7px; font-size: 12px; }
+  & b { margin-right: 4px; }
 }
 
 /* Beside the title the aside keeps its natural width: the title's large grow factor takes the free space. Once it
