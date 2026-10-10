@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-10
+
 ### Added
 
 - `Cloudflare/clef-omni` (Qwen3-Omni 30B-A3B: images, audio, video) and `LiquidAI/d1-omni-600M` (new `d1`
