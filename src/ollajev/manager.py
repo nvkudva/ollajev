@@ -15,7 +15,7 @@ from typing import Any
 import psutil
 
 from . import config, media, names, registry, store
-from .adapters import pick_device
+from .adapters import fast_cpu_convs, pick_device
 from .adapters.base import Adapter
 
 log = logging.getLogger(__name__)
@@ -165,6 +165,7 @@ class Manager:
         log.info("Loading %s on %s …", key, device)
         started = time.monotonic()
         adapter = resolved.family.load(path, resolved, device)
+        fast_cpu_convs()
         adapter.name = key
         log.info("Loaded %s in %.1f s", key, time.monotonic() - started)
         slot = Slot(key, adapter, resolved, getattr(adapter, "device", None) or device)

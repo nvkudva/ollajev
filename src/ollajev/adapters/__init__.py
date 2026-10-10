@@ -119,6 +119,48 @@ def cached_repo(repo: str, revision: str | None) -> str | None:
     return os.path.dirname(config_file) if isinstance(config_file, str) else None
 
 
+# transformers' modeling modules whose linear-attention layers run causal_conv1d_fn, a depthwise conv1d. Without the
+# CUDA-only causal-conv1d package they use the PyTorch reference, and PyTorch's CPU depthwise conv1d costs ~230 ms
+# per call whatever the length (torch 2.14, macOS arm64): Vega 0.8B took 4 s per request on the CPU, 3.6 s of it here.
+CONV_MODULES = ("qwen3_5", "qwen3_5_moe", "qwen3_next", "lfm2", "olmo_hybrid")
+
+
+def fast_cpu_convs() -> None:
+    """On the CPU, compute causal_conv1d_fn as K shifted multiply-adds (K is 4): the same sums in fp32, 40-4000x
+    faster. Other devices keep transformers' own path. Patches only modules already imported, after a model loads;
+    the call sites look the function up in their module on each call."""
+    for name in CONV_MODULES:
+        module = sys.modules.get(f"transformers.models.{name}.modeling_{name}")
+        original = getattr(module, "causal_conv1d_fn", None)
+        if original is None or getattr(original, "_ollajev_cpu", False):
+            continue
+        module.causal_conv1d_fn = _cpu_conv(original)  # type: ignore[union-attr]
+
+
+def _cpu_conv(original: Any) -> Any:
+    import torch.nn.functional as F
+    from transformers.activations import ACT2FN
+
+    def causal_conv1d_fn(hidden_states, weight, bias=None, activation=None, **kwargs):
+        if hidden_states.device.type != "cpu":
+            return original(hidden_states, weight, bias=bias, activation=activation, **kwargs)
+        size, length = weight.shape[-1], hidden_states.shape[-1]
+        x = F.pad(hidden_states.float(), (size - 1, 0))
+        w = weight.float()
+        out = x[..., :length] * w[:, :1]
+        for k in range(1, size):
+            out = out + x[..., k : k + length] * w[:, k : k + 1]
+        if bias is not None:
+            out = out + bias.float()[:, None]
+        out = out.to(weight.dtype)
+        if activation is not None:
+            out = ACT2FN[activation](out)
+        return out.to(hidden_states.dtype)
+
+    causal_conv1d_fn._ollajev_cpu = True  # type: ignore[attr-defined]
+    return causal_conv1d_fn
+
+
 def text_state(state: Any) -> str:
     """Models that take only text get JSON states as compact JSON text."""
     import json

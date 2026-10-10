@@ -15,6 +15,11 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- PyTorch models with linear-attention layers (Qwen3.5: Vega, decider, Intern-Decision, OneJev, Kev 0.8B/4B, JevK5;
+  also Qwen3-Next, LFM2, OLMo-hybrid) answer 20-40x faster on the CPU. Their causal conv ran PyTorch's CPU depthwise
+  conv1d, ~230 ms a call at any length; it is now computed as shifted multiply-adds (same sums, differences under
+  1e-5). Vega 0.8B went from 4-8 s to 0.2 s a request, decider-0.8b from 9 s to 0.2 s. GPUs and Apple GPUs are
+  unchanged.
 - Download sizes and progress include the base model a family fetches beside the repo (Vega's backbone).
 - The playground warns near the answering model's own token limit instead of a fixed 512.
 - After a Clef-MLX model loaded, PyTorch Qwen3.5 models got mlx-vlm's numpy image processor (mlx-vlm replaces
