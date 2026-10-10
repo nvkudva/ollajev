@@ -66,3 +66,11 @@
 - [x] Manager top bar: menu shortcuts read `Label (key)`, the server pill is gone; the Server panel's button reads Web Demo; the row Info icon is ⓘ
 - [x] Downloads column after Size in the manager list, read once per session from `store.downloads`
 - [x] Twelve repos added to the catalog: kev-4b, kev-9b, Intern-Decision-2B, Intern-Decision-4B, wfzyx/von, heman10x/rlcd-modernbert-151m, alibiserikbay/JevK5, JevK5-2B, OmniJev/OneJev-0.8B, OneJev-4B, Cloudflare/clef-flash, Cloudflare/clef
+- [x] Media input (images, audio, videos as data URLs) on /v1/systemone and the playground
+- [x] clef-omni via the clef family (vendored Qwen3-Omni joint schema code); images and video for clef and clef-flash
+- [x] d1 family for LiquidAI/d1-omni-600M; checked end to end on MPS with text, image and audio
+- [ ] Run clef-omni end to end on a machine with ~64 GB of GPU memory and record its limits
+- [ ] Run clef-flash end to end with an image and a video
+- [x] clef-mlx family for mlx-community/clef-omni-4bit; checked end to end on MLX with text, image, audio, video
+- [x] Playground lists every curated model and downloads from the page
+- [ ] Run mlx-community/clef-flash-8bit, clef-8bit, clef-omni-8bit end to end

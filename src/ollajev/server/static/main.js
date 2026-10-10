@@ -78,6 +78,9 @@ const save = () => store.set("ollajev.questions", questions);
 
 const modelSel = $("#model");
 let limits = {};
+let models = [];   // downloaded, from /v1/models
+let catalog = [];  // curated models not downloaded yet, from /ui/catalog
+function downloaded(name) { return models.some((m) => m.name === name); }
 const currentModel = () => modelSel.value || "jev-latest";
 const stateBox = $("#state");
 stateBox.value = store.get("ollajev.state", "");
@@ -85,9 +88,23 @@ stateBox.value = store.get("ollajev.state", "");
 const qJsonHost = $("#q-json");
 const requestError = $("#request-error");
 
+/* Attached media, kept in memory only: data URLs are too big for localStorage. */
+let attachments = [];
+const MEDIA_FIELD = { image: "images", audio: "audio", video: "videos" };
+
+/** `images`, `audio` and `videos` as data URLs. `short` cuts each to its type and file name, for the JSON pane and
+    the saved conversation. */
+function mediaFields({ short = false } = {}) {
+  const out = {};
+  for (const a of attachments) {
+    (out[a.field] ??= []).push(short ? `${a.url.slice(0, a.url.indexOf(",") + 1)}… (${a.name})` : a.url);
+  }
+  return out;
+}
+
 /** The wire request the sidebar holds, in the order the server documents it. */
-function requestBody({ strict = true } = {}) {
-  return { state: stateBox.value, model: currentModel(), questions: buildQuestions({ strict }) };
+function requestBody({ strict = true, short = false } = {}) {
+  return { state: stateBox.value, model: currentModel(), ...mediaFields({ short }), questions: buildQuestions({ strict }) };
 }
 
 function failRequest(message) {
@@ -262,7 +279,7 @@ function sendRequest() {
   } catch (e) {
     return failRequest(e.message);
   }
-  if (!request.state.trim()) return failRequest("The request needs a state to judge.");
+  if (!request.state.trim() && !attachments.length) return failRequest("The request needs a state or media to judge.");
   requestError.hidden = true;
   ask(request);
 }
@@ -270,7 +287,7 @@ function sendRequest() {
 /** The state is the one thing a request cannot go without, so Send stands down while it is blank. */
 let busy = false;
 function syncSend() {
-  $("#send").disabled = busy || !stateBox.value.trim();
+  $("#send").disabled = busy || (!stateBox.value.trim() && !attachments.length) || (modelSel.value !== "" && !downloaded(modelSel.value));
 }
 
 function setView(mode) {
@@ -288,7 +305,7 @@ function paintEditor() {
   const asJson = qView === "json";
   $("#request-ui").hidden = asJson;
   qJsonHost.hidden = !asJson;
-  if (asJson) jsonPane.write(JSON.stringify(requestBody({ strict: false }), null, 2));
+  if (asJson) jsonPane.write(JSON.stringify(requestBody({ strict: false, short: true }), null, 2));
   for (const b of document.querySelectorAll("#q-view button")) {
     b.classList.toggle("is-on", b.dataset.view === qView);
     b.setAttribute("aria-pressed", String(b.dataset.view === qView));
@@ -443,11 +460,16 @@ function stateRowMarkup(turn) {
   const replied = turn.data !== undefined || turn.error !== undefined;
   return html`
     <div class="state">
-      <div class="state-text">${turn.request.state}</div>
+      <div class="state-text">${turn.request.state}${attachedNames(turn.request).map((n) => html`<div class="meta">📎 ${n}</div>`)}</div>
       <pre class="state-json">${JSON.stringify(turn.request, null, 2)}</pre>
       ${replied ? html`<div class="state-label state-sub">Response</div>
       <pre class="state-resp">${JSON.stringify(turn.data ?? { error: turn.error }, null, 2)}</pre>` : ""}
     </div>`;
+}
+
+/** File names of a shortened request's media: each entry ends in "(name)". */
+function attachedNames(request) {
+  return Object.values(MEDIA_FIELD).flatMap((f) => request[f] ?? []).map((u) => u.match(/\((.*)\)$/)?.[1] ?? "media");
 }
 
 function turnMarkup(turn, index) {
@@ -500,6 +522,8 @@ async function ask(request) {
   log.querySelector(".empty")?.remove();
   const at = Date.now();
   const loaded = await fetch("/api/ps").then((r) => r.json()).then((b) => b.models.some((m) => m.name === request.model)).catch(() => true);
+  const sent = request;
+  request = { ...request, ...mediaFields({ short: true }) };
   const pending = node(turnMarkup({ request, at, pending: true, loading: !loaded }, history.length));
   log.append(pending);
   applyView(pending, "ui");
@@ -514,7 +538,7 @@ async function ask(request) {
     const res = await fetch("/v1/systemone", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(request),
+      body: JSON.stringify(sent),
     });
     const body = await res.json();
     const ms = Math.round(performance.now() - started);
@@ -551,6 +575,7 @@ const ACTIONS = {
     turn.view = el.dataset.view;
     applyView(el.closest(".turn"), turn.view);
   },
+  "del-media": (el) => { attachments.splice(Number(el.dataset.i), 1); paintMedia(); if (qView === "json") paintEditor(); },
   "del-question": (el) => { questions.splice(Number(el.dataset.i), 1); save(); paintEditor(); },
   "add-option": (el) => { questions[Number(el.dataset.i)].criteria.push(["", ""]); save(); paintEditor(); },
   "del-option": (el) => { questions[Number(el.dataset.i)].criteria.splice(Number(el.dataset.j), 1); save(); paintEditor(); },
@@ -597,13 +622,56 @@ function limitsText(l) {
   if (l.max_levels) parts.push(`${l.max_levels} levels`);
   if (l.max_tokens) parts.push(`${l.max_tokens} tok`);
   if (l.languages) parts.push(l.languages);
+  if (l.inputs) parts.push(l.inputs.join(", "));
   return parts.join(" · ") || "—";
 }
+
+// ---- media ---------------------------------------------------------------
+// Shown when the model reads images, audio or video, or while something is still attached.
+
+const mediaInput = $("#media");
+
+function paintMedia() {
+  const kinds = (limits.inputs ?? []).filter((k) => k in MEDIA_FIELD);
+  $("#media-box").hidden = !kinds.length && !attachments.length;
+  $("#media-kinds").textContent = kinds.length ? `this model reads ${kinds.join(", ")}` : "this model reads text only";
+  mediaInput.accept = kinds.map((k) => `${k}/*`).join(",");
+  mount($("#media-list"), html`${attachments.map((a, i) => html`
+    <li>
+      ${a.kind === "image" ? html`<img src="${a.url}" alt="">` : html`<span class="media-kind">${a.kind}</span>`}
+      <span class="media-name" title="${a.name}">${a.name}</span>
+      <button class="ghost x" type="button" data-act="del-media" data-i="${i}" data-key="del-media-${i}" aria-label="Remove ${a.name}">✕</button>
+    </li>`)}`);
+  syncSend();
+}
+
+const readDataUrl = (file) => new Promise((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onload = () => resolve(reader.result);
+  reader.onerror = () => reject(reader.error);
+  reader.readAsDataURL(file);
+});
+
+mediaInput.onchange = async () => {
+  for (const file of mediaInput.files) {
+    const kind = file.type.split("/")[0];
+    if (!(kind in MEDIA_FIELD)) {
+      failRequest(`${file.name} is not an image, audio or video file.`);
+      continue;
+    }
+    attachments.push({ kind, field: MEDIA_FIELD[kind], name: file.name, url: await readDataUrl(file) });
+  }
+  mediaInput.value = "";
+  paintMedia();
+  if (qView === "json") paintEditor();
+};
 
 function showModel() {
   const m = models.find((x) => x.name === modelSel.value);
   limits = m?.limits ?? {};
-  $("#r-limits").textContent = $("#r-limits").title = limitsText(limits);
+  $("#r-limits").textContent = $("#r-limits").title = m ? limitsText(limits) : "download the model to see its limits";
+  showPull();
+  paintMedia();
   const repo = modelSel.value.split(":")[0];
   const link = $("#model-link");
   link.href = `https://huggingface.co/${repo}`;
@@ -620,23 +688,99 @@ function initialModel(names, loaded, defaultName, saved) {
   return names.includes(saved) ? saved : names[0] ?? "";
 }
 
-let models = [];
-Promise.all([
-  fetch("/v1/models").then((r) => r.json()),
-  fetch("/api/ps").then((r) => r.json()).catch(() => ({ models: [] })),
-]).then(([body, ps]) => {
-  models = body.models ?? [];
-  for (const m of models) modelSel.append(node(html`<option value="${m.name}">${m.name}${m.default ? " (default)" : ""}</option>`));
-  if (!models.length) modelSel.append(node(html`<option value="">No models installed</option>`));
-  const names = models.map((m) => m.name);
-  const loaded = (ps.models ?? []).map((m) => m.name);
-  const pick = initialModel(names, loaded, models.find((m) => m.default)?.name, store.get("ollajev.model", ""));
-  if (pick) modelSel.value = pick;
-  showModel();
-}).catch(() => {
-  modelSel.append(node(html`<option value="">Could not load models</option>`));
-});
+// The picker lists downloaded models first, then every curated model not on disk yet; picking one of those
+// offers to download it here.
+
+async function loadModels(select) {
+  try {
+    const [body, ps, cat] = await Promise.all([
+      fetch("/v1/models").then((r) => r.json()),
+      fetch("/api/ps").then((r) => r.json()).catch(() => ({ models: [] })),
+      fetch("/ui/catalog").then((r) => r.json()).catch(() => ({ models: [] })),
+    ]);
+    models = body.models ?? [];
+    catalog = (cat.models ?? []).filter((e) => !downloaded(e.name));
+    const names = models.map((m) => m.name);
+    const loaded = (ps.models ?? []).map((m) => m.name);
+    mount(modelSel, html`
+      <optgroup label="Downloaded">
+        ${models.length ? models.map((m) => html`<option value="${m.name}">${m.name}${m.default ? " (default)" : ""}</option>`)
+          : html`<option value="" disabled>No models downloaded yet</option>`}
+      </optgroup>
+      ${catalog.length ? html`<optgroup label="Available to download">
+        ${catalog.map((e) => html`<option value="${e.name}">${e.name} · ${e.size_gb} GB</option>`)}
+      </optgroup>` : ""}`);
+    const pick = select ?? initialModel(names, loaded, models.find((m) => m.default)?.name, store.get("ollajev.model", ""));
+    if (pick) modelSel.value = pick;
+    showModel();
+  } catch {
+    modelSel.append(node(html`<option value="">Could not load models</option>`));
+  }
+}
+loadModels();
 modelSel.onchange = () => { store.set("ollajev.model", modelSel.value); showModel(); };
+
+// ---- download ------------------------------------------------------------
+
+let pulling = null;  // the model being downloaded, if any
+
+function showPull() {
+  const entry = catalog.find((e) => e.name === modelSel.value);
+  $("#pull-row").hidden = !entry && pulling === null;
+  if (entry && pulling === null) {
+    $("#pull").textContent = `Download ${entry.size_gb} GB`;
+    $("#pull-status").textContent = entry.description;
+  }
+  $("#pull").hidden = !entry || pulling !== null;
+  syncSend();
+}
+
+const gb = (bytes) => (bytes / 1e9).toFixed(1);
+
+$("#pull").onclick = async () => {
+  const name = modelSel.value;
+  pulling = name;
+  showPull();
+  const status = $("#pull-status");
+  status.textContent = `starting ${name}…`;
+  let error = null;
+  try {
+    const res = await fetch("/api/pull", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: name, stream: true }),
+    });
+    if (!res.ok) {  // a 401 or 422 is one JSON body, not the NDJSON stream
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error ?? body.detail?.[0]?.msg ?? `HTTP ${res.status}`);
+    }
+    const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+    let buffer = "";
+    for (let done = false; !done;) {
+      const chunk = await reader.read();
+      done = chunk.done;
+      buffer += chunk.value ?? "";
+      const lines = buffer.split("\n");
+      buffer = done ? "" : lines.pop();  // the last line may come without a newline
+      for (const line of lines.filter((l) => l.trim())) {
+        const event = JSON.parse(line);
+        if (event.error) error = event.error;
+        else if (event.total) status.textContent = `${name}: ${gb(event.completed)} of ${gb(event.total)} GB`;
+        else if (event.status) status.textContent = `${name}: ${event.status}`;
+      }
+    }
+  } catch (e) {
+    error = `Download failed: ${e.message ?? e}`;
+  }
+  pulling = null;
+  if (error) {
+    showPull();
+    status.textContent = error;
+    return;
+  }
+  await loadModels(name);
+  status.textContent = "";
+};
 
 fetch("/ui/presets").then((r) => r.json()).then((presets) => {
   const sel = $("#preset");
@@ -669,7 +813,8 @@ const curlDialog = $("#curl-dialog");
 $("#curl-open").onclick = () => {
   let body;
   try {
-    body = qView === "json" ? JSON.parse(jsonPane.read()) : requestBody({ strict: false });
+    // The JSON pane shows media cut short; the command carries them whole.
+    body = qView === "json" ? { ...JSON.parse(jsonPane.read()), ...mediaFields() } : requestBody({ strict: false });
   } catch (e) {
     failRequest(`Not a valid request: ${e.message}`);
     return;

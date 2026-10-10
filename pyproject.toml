@@ -1,6 +1,6 @@
 [project]
 name = "ollajev"
-version = "0.2.0"
+version = "0.3.0"
 description = "Run System One decision models from Hugging Face locally behind the Jev / System One API"
 readme = "README.md"
 license = "Apache-2.0"
@@ -38,6 +38,10 @@ dependencies = [
     "platformdirs>=4.5,<5",
     "psutil>=7.2,<8",
     "onnxruntime>=1.30.0",
+    "pillow>=12,<13",
+    "av>=19,<20",
+    "torchvision>=0.29,<1",
+    "mlx-vlm>=0.7.6,<0.8; sys_platform == 'darwin' and platform_machine == 'arm64'",
 ]
 
 [project.urls]
@@ -76,6 +80,7 @@ explicit = true
 
 [tool.uv.sources]
 torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+torchvision = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/ollajev"]

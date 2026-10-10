@@ -1,17 +1,34 @@
-"""Cloudflare/clef and clef-flash: a Qwen3.5 backbone with a joint schema head, scored in one forward pass.
+"""Cloudflare/clef, clef-flash and clef-omni: a multimodal Qwen backbone with a joint schema head, scored in one
+forward pass.
 
-The repos ship `joint_schema_model.py`; an unchanged copy is vendored (ollajev/_vendor/clef), so no repo
-code is imported. Text states only; the vision tower loads with the checkpoint but stays unused.
+The repos ship `joint_schema_model.py`; unchanged copies are vendored (ollajev/_vendor/clef for the dense Qwen3.5
+models, ollajev/_vendor/clef_omni for the Qwen3-Omni MoE), so no repo code is imported. clef and clef-flash read
+images and videos beside the state; clef-omni also reads audio, and hears a video's soundtrack with its frames.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
+from .. import media
 from .base import Loaded
 
 HEAD = ("joint_head_config.json", "joint_head.safetensors")
-LIMITS = {"max_options": 255, "max_levels": 255, "max_tokens": 16384, "languages": "Multilingual"}
+LIMITS = {
+    "max_options": 255,
+    "max_levels": 255,
+    "max_tokens": 16384,
+    "languages": "Multilingual",
+    "inputs": ["text", "image", "video"],
+}
+OMNI_LIMITS = {**LIMITS, "max_tokens": 64000, "inputs": ["text", "image", "audio", "video"]}
+
+
+def is_omni(path: str) -> bool:
+    import json
+    from pathlib import Path
+
+    return json.loads((Path(path) / "config.json").read_text()).get("model_type") == "qwen3_omni_moe"
 
 
 def record(state: Any, questions: dict[str, dict[str, Any]]) -> dict[str, Any]:
@@ -42,7 +59,8 @@ class _Clef:
     runs_repo_code = False
 
     def limits(self, resolved) -> dict:
-        return LIMITS
+        """By name until loaded; the loaded model's limits follow its config.json."""
+        return OMNI_LIMITS if "omni" in resolved.repo_id.lower() else LIMITS
 
     def matches(self, repo_id: str, files: list[str]) -> bool:
         """Cloudflare's layout in bf16. MLX, vLLM, EXL3, OpenVINO and int8 copies keep the joint head but ship
@@ -52,23 +70,44 @@ class _Clef:
         return official and not scripts and "recipe.yaml" not in files
 
     def allow_patterns(self, resolved) -> list[str]:
-        return ["*.json", "*.safetensors", "*.jinja", "tokenizer*"]
+        # joint_schema_model.py is fetched only so offline detection sees it; the vendored copy is what runs.
+        return ["*.json", "*.safetensors", "*.jinja", "tokenizer*", "joint_schema_model.py"]
 
     def load(self, path: str, resolved, device: str | None) -> Loaded:
         import torch
 
-        from .._vendor.clef import joint_schema_model as clef
+        from .._vendor.clef import joint_schema_model as dense
+        from .._vendor.clef_omni import joint_schema_model as omni_model
 
+        omni = is_omni(path)
+        clef: Any = omni_model if omni else dense
+        limits = OMNI_LIMITS if omni else LIMITS
         device = device or "cpu"
         model, processor = clef.load_release_model(
             path, device=device, dtype=torch.float32 if device == "cpu" else torch.bfloat16
         )
         tok = processor.tokenizer
 
-        def predict(state: Any, questions: dict[str, dict[str, Any]]) -> dict[str, Any]:
-            enc = clef.encode_record(tok, record(state, questions), max_length=1 << 30)
-            if len(enc.input_ids) > LIMITS["max_tokens"]:
-                raise ValueError(f"request is {len(enc.input_ids)} tokens; this model takes {LIMITS['max_tokens']}")
+        def predict(state: Any, questions: dict[str, dict[str, Any]], images=(), audio=(), videos=()) -> dict[str, Any]:
+            rec = record(state, questions)
+            if images:
+                rec["images"] = [media.image(x) for x in images]
+            if audio:
+                rec["audio"] = [media.audio(x) for x in audio]
+            if videos and omni:  # clef-omni decodes the bytes itself, so it can hear the soundtrack too
+                rec["videos"] = list(videos)
+            elif videos:  # frames already sampled at media.VIDEO_FPS: say so, or Qwen3.5 assumes 24 fps
+                rec["videos"] = [media.video(x) for x in videos]
+                rec["media_kwargs"] = {
+                    "do_sample_frames": False,
+                    "video_metadata": [
+                        {"fps": media.VIDEO_FPS, "total_num_frames": len(v), "frames_indices": list(range(len(v)))}
+                        for v in rec["videos"]
+                    ],
+                }
+            enc = clef.encode_record(tok, rec, max_length=1 << 30, processor=processor)
+            if len(enc.input_ids) > limits["max_tokens"]:
+                raise ValueError(f"request is {len(enc.input_ids)} tokens; this model takes {limits['max_tokens']}")
             batch = clef.collate_records([enc], tok.pad_token_id, torch.device(device))
             with torch.inference_mode():
                 logits = model(batch)[0]
@@ -83,9 +122,9 @@ class _Clef:
 
         return Loaded(
             resolved.name,
-            f"Clef joint schema model (PyTorch {device})",
+            f"Clef{'-Omni' if omni else ''} joint schema model (PyTorch {device})",
             None,
-            self.limits(resolved),
+            limits,
             predict,
             device=device,
         )

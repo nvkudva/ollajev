@@ -99,9 +99,10 @@ def max_loaded_models() -> int:
 
 
 def max_body_bytes() -> int:
-    """Largest request body the API accepts. OLLAJEV_MAX_BODY_BYTES overrides the 8 MiB default."""
+    """Largest request body the API accepts. OLLAJEV_MAX_BODY_BYTES overrides the 64 MiB default, sized for a video
+    sent as a base64 data URL."""
     try:
-        return int(os.environ.get("OLLAJEV_MAX_BODY_BYTES", 8 * 1024 * 1024))
+        return int(os.environ.get("OLLAJEV_MAX_BODY_BYTES", 64 * 1024 * 1024))
     except ValueError:
         raise ValueError("OLLAJEV_MAX_BODY_BYTES must be a whole number") from None
 

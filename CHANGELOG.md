@@ -6,6 +6,32 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-10
+
+### Added
+
+- `Cloudflare/clef-omni` (Qwen3-Omni 30B-A3B: images, audio, video) and `LiquidAI/d1-omni-600M` (new `d1`
+  family: images or a voice clip) in the catalog.
+- `/v1/systemone` takes `images`, `audio` and `videos` as base64 data URLs; `limits.inputs` says which a
+  model reads. clef and clef-flash now read images and video.
+- New `clef-mlx` family: Clef, Clef-Flash and Clef-Omni on MLX for Apple Silicon, in 4 and 8 bits
+  (`mlx-community/clef-flash-4bit` 6.2 GB, `clef-4bit` 16.3 GB, `clef-omni-4bit` 19.8 GB, and their `-8bit` copies).
+- The playground lists every curated model and downloads one from the page (`GET /ui/catalog`, `/api/pull`).
+- The playground attaches images, audio and video for models that read them.
+
+### Fixed
+
+- clef downloads now include the script the family is detected by, so a pulled clef model resolves offline (the
+  server failed with "not a supported System One model"). Snapshots pulled before the fix are repaired by
+  running `ollajev pull` again.
+- Unloading an MLX model releases its Metal memory, so the next model fits.
+
+### Changed
+
+- `OLLAJEV_MAX_BODY_BYTES` defaults to 64 MiB, to fit a video.
+- Dependencies: `pillow`, `av` (PyAV) and `torchvision` (the clef processors need it); `mlx-vlm` 0.7.x on
+  Apple Silicon Macs only.
+
 ## [0.2.0] - 2026-10-05
 
 First release on PyPI: `uv tool install ollajev`.

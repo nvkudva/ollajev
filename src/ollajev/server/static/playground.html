@@ -21,7 +21,7 @@
       <p class="tagline">
         It is not a chat model. It is a System One model like
         <a href="https://typesafe.ai" target="_blank" rel="noreferrer">Jev</a>.
-        <br>Send a state (any text or JSON) and a set of questions; it returns answers with calibrated probabilities in a single forward pass.
+        <br>Send a state (any text or JSON, plus images, audio or video for models that read them) and a set of questions; it returns answers with calibrated probabilities in a single forward pass.
         <br>Question types: <b>noul</b> answers true or false, <b>choice</b> picks one named option, <b>score</b> returns the expectation over ordered levels.
       </p>
       </div>
@@ -29,6 +29,7 @@
     <div class="bar-aside">
       <dl class="readout">
         <div><dt><label for="model">Model</label></dt><dd><select id="model" aria-label="Model that answers the request"></select></dd></div>
+        <div id="pull-row" hidden><dt>Download</dt><dd><button type="button" class="ghost" id="pull"></button> <span id="pull-status" role="status"></span></dd></div>
         <div><dt>Limits</dt><dd id="r-limits">—</dd></div>
         <div><dt>API server</dt><dd>/v1/systemone</dd></div>
         <div><dt>Last run</dt><dd id="r-tokens">—</dd></div>
@@ -62,6 +63,14 @@
               <label for="state">state</label>
             </div>
             <textarea id="state" placeholder="The state every question refers to — a customer message, a prompt, an email…&#10;⌘/Ctrl+Enter to send"></textarea>
+          </div>
+          <div class="q" id="media-box" hidden>
+            <div class="row">
+              <label for="media">media</label>
+              <span class="meta" id="media-kinds"></span>
+            </div>
+            <ul class="media-list" id="media-list"></ul>
+            <input type="file" id="media" multiple aria-describedby="media-kinds">
           </div>
           <div id="questions"></div>
         </div>

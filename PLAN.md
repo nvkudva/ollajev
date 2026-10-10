@@ -226,3 +226,29 @@ Phase 1 names: `Mapika/decider-4b-GGUF:Q4_K_M` (default), `Mapika/decider-2b-GGU
 - 2026-10-03: The 4 GB limit is removed everywhere. Any size may be catalogued or added; the catalog stays limited to models checked to answer `/v1/systemone`. Reason: search now lets users add any model, and the limit was a phase 1 scoping choice, not a runtime constraint. The free-memory check before load stays open.
 - 2026-10-03: A GGUF repo that Hugging Face lists as a `quantized` derivative inherits its base repo's family when that family declares `base_files` and runs no repo code (decider today). The copy supplies the weights, the base its config and tokenizer, pinned in config `bases`. This supersedes "community GGUFs without readout code are not usable" for decider, whose readout is the LM head's letter logits. Rejected: inheriting on `finetune`, `merge` or `adapter` relations (weights or head differ).
 - 2026-10-03: Twelve catalog entries added, one per repo the existing adapters already detect by file layout: Cloudflare/clef (55 GB) and clef-flash (19 GB), wfzyx/von, heman10x/rlcd-modernbert-151m, alibiserikbay/JevK5 and JevK5-2B, OmniJev/OneJev-0.8B and OneJev-4B, internlm/Intern-Decision-2B and 4B, jaredpalmer/kev-4b and kev-9b. Detection was checked against each repo's live file list; a `/v1/systemone` call per repo is still owed before the catalog's "checked" claim holds for them. Left out although popular: `alibiserikbay/JevK5-GGUF` and `jaredpalmer/kev-27b` (no family matches the layout), `autotrust/JEV-9B`, OpenThai-SystemOne, the Jev-Style line and the laya GGUF ports (each needs an adapter). The TUI list gains a Downloads column after Size, read once per session from `store.downloads` (one `model_info` call per repo, cached, empty offline).
+
+### 2026-10-10 — Multimodal models: clef-omni and d1-omni
+
+- Wire: optional `images`, `audio`, `videos` on `/v1/systemone`, each a list of base64 data URLs (clef-omni's own `systemone` takes the same fields). `limits.inputs` lists what a model reads; `max_<field>` caps a count.
+- Only data URLs are accepted. Rejected: URLs and file paths, which vendored clef-omni code would fetch or read (SSRF, local file read).
+- `ollajev/media.py` owns decoding (Pillow, PyAV). Adapters get raw bytes in `media`; text-only adapters keep the two-argument `system_one`, so unchanged adapters and stubs still work.
+- clef-omni joins the clef family: same repo layout, `config.json` `model_type` `qwen3_omni_moe` picks the vendored `_vendor/clef_omni` code. clef-omni decodes video bytes itself to hear the soundtrack; dense clef gets 2 fps frames plus `video_metadata`.
+- d1-omni-600M is a new `d1` family on trust_remote_code. float16 on GPU, never bfloat16 (model card). Images or one audio clip per request, not both.
+- `OLLAJEV_MAX_BODY_BYTES` default 8 MiB -> 64 MiB for video.
+- `torchvision` becomes a dependency: Qwen video processors need it, including for the dense clef models.
+- d1-omni license: LFM Open License v1.0 (commercial use only under 10M USD revenue). Kept in the catalog, noted in README; unlike CC-BY-NC it permits commercial use for most users.
+
+### 2026-10-10 — clef-omni on MLX
+
+- New `clef-mlx` family for `mlx-community/clef-omni-4bit` and `-8bit`: the repo's `clef_mlx.py` vendored unchanged (`_vendor/clef_mlx`), so no trust prompt; the repo copy is never downloaded.
+- Matched by the joint head layout plus `clef_mlx.py` and "omni" in the repo id. Dense clef MLX copies ship a different script (other blob), so they stay unsupported rather than mis-detected.
+- `mlx-vlm>=0.7.6,<0.8` only on darwin arm64: the script uses mlx-vlm internals tested on 0.7. Other platforms refuse the load with a clear error.
+- `truncate=False`: over-long requests get a 422, like the PyTorch clef adapter, instead of a silently cut state.
+- Media: images and audio decoded by `ollajev.media`; video bytes go to the runtime so it hears the soundtrack. URLs never reach it.
+
+### 2026-10-10 — Dense clef on MLX, and downloads from the playground
+
+- `clef-mlx` covers the dense MLX copies too (mlx-community clef and clef-flash, 4 and 8 bit, one shared `clef_mlx.py`, vendored as `_vendor/clef_mlx_dense`). `config.json` `model_type` picks the runtime, as for PyTorch clef; the "omni" name rule is gone.
+- Dense MLX video: frames at 2 fps with `do_sample_frames: False` and `source_fps: 2.0`, or the runtime assumes a 24 fps source. Images and videos together raise NotImplementedError in the runtime, so the adapter answers 422 first.
+- 8-bit copies are catalogued without a test run (user request): same script blob as the tested 4-bit copies.
+- Playground model picker: downloaded models, then curated ones not on disk from `GET /ui/catalog`; Download streams `/api/pull`. Trust stays CLI-only; the page shows the pull command.

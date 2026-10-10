@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
+import functools
 import logging
 import secrets
 import time
@@ -18,7 +20,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from .. import config, normalize, presets
+from .. import catalog, config, media, normalize, presets
 from ..manager import Manager, NotDownloaded, NotEnoughMemory, NotTrusted, default_model
 from . import admin
 
@@ -55,6 +57,10 @@ class SystemOneRequest(BaseModel):
     state: JSONContent
     model: str = "jev-latest"  # manager.DEFAULT_ALIASES: means the default model
     questions: dict[str, Question] = Field(min_length=1)
+    # Base64 data URLs, read by models whose limits list the matching input (image, audio, video).
+    images: list[str] | None = None
+    audio: list[str] | None = None
+    videos: list[str] | None = None
 
 
 manager: Manager | None = None
@@ -192,6 +198,12 @@ async def ui_presets() -> dict[str, Any]:
     return presets.examples()
 
 
+@app.get("/ui/catalog")
+async def ui_catalog() -> dict[str, Any]:
+    """The curated models, downloaded or not, for the playground's model picker."""
+    return {"models": [dataclasses.asdict(e) for e in catalog.CATALOG]}
+
+
 @app.get("/v1/models")
 async def list_models() -> dict[str, Any]:
     """Every downloaded model, default first. TypeSafe clients read name, description and release_date."""
@@ -214,6 +226,12 @@ async def list_models() -> dict[str, Any]:
 @app.post("/v1/systemone")
 async def system_one(req: Annotated[SystemOneRequest, Body()], response: Response) -> Any:
     questions = {name: _wire(q) for name, q in req.questions.items()}
+    inputs: dict[str, list[bytes]] = {}
+    for field in media.KINDS:
+        try:  # up to OLLAJEV_MAX_BODY_BYTES of base64: off the event loop
+            inputs[field] = await asyncio.to_thread(media.decode, field, getattr(req, field) or [])
+        except ValueError as exc:
+            return _invalid(["body", field], str(exc))
     manager = current_manager()
     requested_at = time.time()
     try:
@@ -221,7 +239,11 @@ async def system_one(req: Annotated[SystemOneRequest, Body()], response: Respons
         # One resolve: run() loads when needed, so no separate get() (which re-resolved offline) first.
         # Inference blocks on the per-model slot lock, so it runs off the event loop and health/tags
         # stay responsive while a question answers.
-        slot, result = await asyncio.to_thread(manager.run, req.model, req.state, questions)
+        if any(inputs.values()):
+            run = functools.partial(manager.run, req.model, req.state, questions, inputs=inputs)
+        else:
+            run = functools.partial(manager.run, req.model, req.state, questions)
+        slot, result = await asyncio.to_thread(run)
         finished = time.monotonic()
         answers = normalize.answers(questions, result["answers"])
     except (NotDownloaded, NotTrusted, NotEnoughMemory) as exc:

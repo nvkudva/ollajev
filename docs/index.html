@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Ollajev</title>
-<meta name="description" content="Like Ollama, for System One decision models: a terminal UI to browse, search, download and serve models from Hugging Face, behind TypeSafe's /v1/systemone API.">
+<meta name="description" content="Like Ollama, for System One decision models: a terminal UI to browse, search, download and serve models from Hugging Face, behind TypeSafe's /v1/systemone API. Now with images, audio and video.">
 <meta name="color-scheme" content="light dark">
 <link rel="icon" type="image/svg+xml" href="logo.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -304,11 +304,19 @@ const MODELS = [
   ["alibiserikbay/JevK5-2B", 3.8, "PyTorch", "English", "JevK5 2B; GGUF copies run on llama.cpp"],
   ["OmniJev/OneJev-0.8B", 2.2, "PyTorch", "Multilingual", "OneJev 0.8B, 32k tokens; GGUF copies run on llama.cpp"],
   ["OmniJev/OneJev-4B", 10.4, "PyTorch", "Multilingual", "OneJev 4B, 32k tokens; GGUF copies run on llama.cpp"],
-  ["Cloudflare/clef-flash", 19.1, "PyTorch", "Multilingual", "clef-flash, 255 options, 16k tokens"],
-  ["Cloudflare/clef", 55, "PyTorch", "Multilingual", "clef, 255 options, 16k tokens"],
+  ["Cloudflare/clef-flash", 19.1, "PyTorch", "Multilingual", "clef-flash, 255 options, 16k tokens; images, video"],
+  ["Cloudflare/clef", 55, "PyTorch", "Multilingual", "clef, 255 options, 16k tokens; images, video"],
+  ["Cloudflare/clef-omni", 70.9, "PyTorch", "Multilingual", "clef-omni, Qwen3-Omni 30B-A3B; images, audio, video"],
+  ["mlx-community/clef-flash-4bit", 6.2, "MLX", "Multilingual", "clef-flash, 4-bit for Apple Silicon; images, video"],
+  ["mlx-community/clef-flash-8bit", 10.7, "MLX", "Multilingual", "clef-flash, 8-bit for Apple Silicon; images, video"],
+  ["mlx-community/clef-4bit", 16.3, "MLX", "Multilingual", "clef, 4-bit for Apple Silicon; images, video"],
+  ["mlx-community/clef-8bit", 29.8, "MLX", "Multilingual", "clef, 8-bit for Apple Silicon; images, video"],
+  ["mlx-community/clef-omni-4bit", 19.8, "MLX", "Multilingual", "clef-omni, 4-bit for Apple Silicon; images, audio, video"],
+  ["mlx-community/clef-omni-8bit", 35, "MLX", "Multilingual", "clef-omni, 8-bit for Apple Silicon; images, audio, video"],
+  ["LiquidAI/d1-omni-600M", 2.35, "PyTorch", "Multilingual", "d1-omni, 600M; images or a 30 s voice clip"],
 ].map(([name, gb, runtime, languages, description, isDefault]) => ({ name, gb, runtime, languages, description, isDefault: !!isDefault }));
 
-const RUNTIMES = ["Any", "llama.cpp", "PyTorch"];
+const RUNTIMES = ["Any", "llama.cpp", "PyTorch", "MLX"];
 const LANGUAGES = ["Any", "English", "Multilingual"];
 
 const EXAMPLES = {
@@ -375,6 +383,11 @@ const SHOTS = {
     src: "tui-search.png",
     width: 1600, height: 1003,
     alt: "The Add a model from Hugging Face dialog after typing jev: 25 models and 101 files with size, download count and runtime. Rows marked with a cross are unsupported and cannot run.",
+  },
+  multimodal: {
+    src: "multimodal-poster.jpg",
+    width: 3200, height: 1800,
+    alt: "Ollajev: decision models can now see and hear. Send images, audio or video with the state to /v1/systemone. Cards for Clef-Omni (Cloudflare, 30B-A3B MoE, images, audio and video, MLX 4-bit 19.8 GB), d1-omni (Liquid AI, 600M, images or a 30-second voice clip, 2.3 GB) and Clef and Clef-Flash on Apple Silicon (images and video, from 6.2 GB).",
   },
   playground: {
     src: "playground.png",
@@ -448,7 +461,7 @@ const QUESTION_TYPES = [
   ["score", "Rate on a scale", "The expected level on an ordered rubric, with a probability per level."],
 ];
 
-const NAV_LINKS = [["#video", "Video"], ["#manager", "Model manager"], ["#start", "Quick start"], ["#commands", "Commands"], ["#how", "Decision models"], ["#playground", "Playground"], ["#models", "Models"]];
+const NAV_LINKS = [["#media", "Media"], ["#video", "Video"], ["#manager", "Model manager"], ["#start", "Quick start"], ["#commands", "Commands"], ["#how", "Decision models"], ["#playground", "Playground"], ["#models", "Models"]];
 
 /* =========================================================
    2. Small primitives
@@ -569,6 +582,7 @@ function Hero() {
         <p class="pitch">Ollajev manages System One decision models from Hugging Face in one terminal screen, then serves them on your machine behind TypeSafe's <code>/v1/systemone</code> API.</p>
         <div class="cta">
           <a class="btn primary" href="#start">Quick start</a>
+          <a class="btn" href="#media">New in 0.3: images, audio, video</a>
           <a class="btn" href=${REPO}><${GitHubIcon} />View on GitHub</a>
         </div>
       </div>
@@ -586,6 +600,34 @@ function Hero() {
     <${Screenshot} shot=${SHOTS.models}
       caption=${html`The model manager, opened with <code>ollajev setup</code>. Pick a model, press <kbd>Enter</kbd> to download it, then <kbd>s</kbd> to serve.`} />
   </div></section>`;
+}
+
+const MEDIA_MODELS = [
+  ["Clef-Omni", "Cloudflare, 30B-A3B MoE", html`Images, audio and video, and it hears a video's soundtrack. <code>mlx-community/clef-omni-4bit</code> runs it on a Mac in 19.8 GB.`],
+  ["d1-omni-600M", "Liquid AI, 600M", html`Images or a 30-second voice clip, on an edge-sized model. <code>LiquidAI/d1-omni-600M</code> is 2.3 GB.`],
+  ["Clef and Clef-Flash", "Cloudflare, now on MLX", html`Images and video. <code>mlx-community/clef-flash-4bit</code> is 6.2 GB on Apple Silicon.`],
+];
+
+const MEDIA_REQUEST = {
+  model: "LiquidAI/d1-omni-600M",
+  state: "",
+  images: ["data:image/jpeg;base64,/9j/4AAQSkZJRg…"],
+  questions: { cats: { type: "choice", instructions: "How many cats are there?", criteria: { one: "One", two: "Two", more: "Three or more" } } },
+};
+
+function Multimodal() {
+  return html`<${Section} id="media" title="Decision models can now see and hear."
+    lede=${html`Send <code>images</code>, <code>audio</code> or <code>videos</code> as base64 data URLs beside the state, and every question is answered over all of it in one forward pass. In the playground, upload an image and ask your questions.`}>
+    <${Screenshot} shot=${SHOTS.multimodal} lazy />
+    <div class="types">
+      ${MEDIA_MODELS.map(([name, by, text]) => html`<div class="type"><code class="name">${by}</code><h3>${name}</h3><p>${text}</p></div>`)}
+    </div>
+    <div class="panel" style=${{ marginTop: "28px" }}>
+      <div class="panel-head"><span><span class="verb">POST</span> /v1/systemone</span><span>request with an image</span></div>
+      <${CodeBlock} value=${MEDIA_REQUEST} label="Request with an image" />
+    </div>
+    <p class="models-note"><code>GET /v1/models</code> lists what each model reads in <code>limits.inputs</code>. URLs and file paths are refused, so a request can never make the server fetch an address or read a local file.</p>
+  <//>`;
 }
 
 function LaunchVideo() {
@@ -771,7 +813,7 @@ function Demo() {
 
 function Playground() {
   return html`<${Section} id="playground" title="A playground in every server."
-    lede=${html`<code>ollajev serve</code> opens <code>/playground</code> in your browser. Load a sample question set or type your own, pick any downloaded model, send, then switch models and compare the answers.`}>
+    lede=${html`<code>ollajev serve</code> opens <code>/playground</code> in your browser. Load a sample question set or type your own, attach an image, audio clip or video for models that read them, send, then switch models and compare the answers. The model picker also lists every curated model and downloads one right from the page.`}>
     <${Screenshot} shot=${SHOTS.playground} lazy
       caption="Two requests on the same question set: decider-4b first, then Julia-1, each with its probability bars and timings." />
   <//>`;
@@ -873,6 +915,7 @@ function App() {
     <${Nav} theme=${theme} setTheme=${setTheme} />
     <main id="main">
       <${Hero} />
+      <${Multimodal} />
       <${LaunchVideo} />
       <${ModelManager} />
       <${QuickStart} />

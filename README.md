@@ -167,10 +167,15 @@ The model manager lists these:
 | `heman10x/rlcd-modernbert-151m` | 0.7 GB | PyTorch | English | **24 options**, **512 tokens** |
 | `alibiserikbay/JevK5`, `JevK5-2B` | 8.4 / 3.8 GB | PyTorch (llama.cpp for GGUF copies) | English | 255 options, 16 levels, 16k tokens |
 | `OmniJev/OneJev-0.8B`, `-4B` | 2.2 / 10.4 GB | PyTorch (llama.cpp for GGUF copies) | Multilingual | 255 options, 10 levels, 32k tokens |
-| `Cloudflare/clef-flash`, `clef` | 19.1 / 55 GB | PyTorch | Multilingual | 255 options, 16k tokens |
+| `Cloudflare/clef-flash`, `clef` | 19.1 / 55 GB | PyTorch | Multilingual | 255 options, 16k tokens; reads images, video |
+| `Cloudflare/clef-omni` | 71 GB | PyTorch | Multilingual | 255 options, 64k tokens; reads images, audio, video |
+| `mlx-community/clef-flash-4bit`, `-8bit` | 6.2 / 10.7 GB | MLX (Apple Silicon only) | Multilingual | same as clef-flash; images **or** videos per request |
+| `mlx-community/clef-4bit`, `-8bit` | 16.3 / 29.8 GB | MLX (Apple Silicon only) | Multilingual | same as clef; images **or** videos per request |
+| `mlx-community/clef-omni-4bit`, `-8bit` | 19.8 / 35 GB | MLX (Apple Silicon only) | Multilingual | same as clef-omni; ~0.2–0.6 s per request on an M-series Mac with 32 GB+ |
+| `LiquidAI/d1-omni-600M` | 2.35 GB | PyTorch | Multilingual (audio: English) | 10 levels, 16k tokens; reads images **or** one 30 s audio clip |
 
 Any other repo works when it belongs to one of these families (decider, laya, julia, open-jev, kev,
-intern-decision, decision1, von, rlcd, jevk5, onejev, clef), for example a fine-tune or a bigger size. Requests over a model's
+intern-decision, decision1, d1, von, rlcd, jevk5, onejev, clef, clef-mlx), for example a fine-tune or a bigger size. Requests over a model's
 limits get a 422 before the model runs. `ollajev show <model>` prints them.
 
 ### Download, switch and remove models
@@ -306,8 +311,31 @@ q3>
   model, start from one of five ready-made examples or write your own state and `noul`, `choice` and
   `score` questions, edit them as a form or as JSON, and send. Each answer lands in a log with its
   probabilities, confidence and timing, so you can rerun the same request on another model and compare.
-  It shows each model's limits and copies any request as a `curl` command. `/ui/presets` serves the
+  It shows each model's limits and copies any request as a `curl` command. The model picker also lists
+  every curated model not downloaded yet; pick one and press Download to fetch it from the page. Models
+  that run repo code still need `ollajev pull <model> --trust` in a terminal, and the page says so. `/ui/presets` serves the
   examples; the old `/demo` address redirects here.
+
+### Images, audio and video
+
+Models that read media take optional `images`, `audio` and `videos` lists in the `/v1/systemone` body,
+each item a base64 data URL. `GET /v1/models` lists what each model reads in `limits.inputs`; media a
+model cannot read gets a 422. URLs and file paths are refused, so a request can never make the server
+fetch an address or read a local file. Audio is resampled to 16 kHz mono; video is sampled at 2 frames
+per second, and clef-omni also hears its soundtrack. Videos longer than 5 minutes are refused. Media a model
+cannot read is refused before the model loads.
+
+```sh
+curl -s http://127.0.0.1:8000/v1/systemone -H 'content-type: application/json' -d '{
+  "model": "LiquidAI/d1-omni-600M",
+  "state": "",
+  "images": ["data:image/jpeg;base64,'"$(base64 < cats.jpg | tr -d '\n')"'"],
+  "questions": {"cats": {"type": "choice", "instructions": "How many cats are there?",
+                         "criteria": {"one": "One", "two": "Two", "more": "Three or more"}}}
+}'
+```
+
+The playground shows a media picker for models that read media.
 
 Every error is `{"detail": [{"loc", "msg", "type"}]}`: 404 `model_not_found`, 403
 `model_not_trusted`, 422 for an invalid request or one over the model's limits.
@@ -329,7 +357,7 @@ The model manager's Settings (`o`) saves the device, address, port, keep-alive a
 | `OLLAJEV_MODELS` | Hugging Face cache | where weights are stored |
 | `OLLAJEV_DEVICE` | best available | force `cpu`, `mps` or `cuda` |
 | `OLLAJEV_HOME` | `~/.ollajev` | config (default model, pins, trusted commits, aliases) and `logs/` |
-| `OLLAJEV_MAX_BODY_BYTES` | `8388608` | largest request body the API accepts (413 above it) |
+| `OLLAJEV_MAX_BODY_BYTES` | `67108864` | largest request body the API accepts (413 above it) |
 | `OLLAJEV_API_KEY` | none | bearer token every API call must send; required to listen on a non-loopback address |
 
 The model `serve` preloads stays loaded until the server stops.
@@ -344,6 +372,11 @@ is read once and moved on the next save.
   (or GPU memory) fails or swaps heavily.
 - Requests to one model run one at a time. On Apple GPUs concurrent forwards crash the process.
 - Julia-1 runs on CPU (its runtime does not move inputs to the Apple GPU); it is fast there.
+- d1-omni-600M is under the LFM Open License v1.0: commercial use is licensed only for organisations
+  under 10 million USD annual revenue.
+- clef-omni needs about 64 GB of GPU memory in bfloat16; it was not run end to end here, only its
+  media encoding. On a Mac, use `mlx-community/clef-omni-4bit` (or `-8bit`) instead.
+- The 8-bit MLX copies share the 4-bit copies' runtime but were not run here.
 - Decision-1.0 Kai returned near-uniform `score` distributions in our tests; its `choice` and
   `noul` answers, and Lex's scores, look normal. The cause is not known yet.
 
