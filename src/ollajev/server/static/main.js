@@ -450,10 +450,12 @@ function turnHeadMarkup(turn, index) {
   const tokens = turn.data?.usage?.input_tokens;
   const maxTokens = models.find((m) => m.name === turn.data?.model)?.limits?.max_tokens;
   const time = turn.at ? new Date(turn.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : null;
+  const model = turn.data?.model ?? turn.request?.model;
   return html`
     <header class="turn-head" data-act="toggle-turn" data-i="${index}">
       <button type="button" class="turn-toggle" aria-expanded="false"><span class="turn-caret" aria-hidden="true">▸</span> Request #${index + 1}</button>
       ${time ? html`<span>· ${time}</span>` : ""}
+      ${model ? html`<span class="turn-model" title="${model}">· ${model}</span>` : ""}
       <span class="turn-meta">
         ${maxTokens && tokens >= 0.9 * maxTokens ? html`<span class="turn-warn" title="Requests past the model's ${maxTokens}-token limit are refused or truncated">⚠ near ${maxTokens}-tok limit</span>` : ""}
         <span>${turn.data ? (tokens != null ? `${tokens} tok` : "done") : turn.pending ? "sending…" : "failed"}</span>
