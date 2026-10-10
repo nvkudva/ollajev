@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-11
+
 ### Added
 
 - New `vega` family: `nandakishorm/vega-08b-public-intents` (Vega 0.8B, 1.8 GB with its backbone) and its
