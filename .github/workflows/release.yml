@@ -46,14 +46,19 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
           name: dist
           path: dist/
       - name: Create GitHub release
+        # The notes are this version's CHANGELOG.md section, then GitHub's list of merged pull requests.
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --generate-notes --verify-tag
+        run: |
+          sh tools/release_notes.sh "${GITHUB_REF_NAME#v}" > notes.md
+          test -s notes.md || { echo "CHANGELOG.md has no section for ${GITHUB_REF_NAME#v}" >&2; exit 1; }
+          gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --notes-file notes.md --generate-notes --verify-tag
 
   homebrew:
     # Points nvkudva/homebrew-tap's formula at the new PyPI release. Pushes with HOMEBREW_TAP_DEPLOY_KEY: the

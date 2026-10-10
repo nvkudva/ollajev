@@ -7,10 +7,15 @@ Run System One decision models from Hugging Face on your machine, behind the sam
 
 <p align="center"><a href="https://nvkudva.github.io/ollajev/">Product page</a> · <a href="#install">Install</a> · <a href="#quick-start">Quick start</a> · <a href="#models">Models</a> · <a href="#api">API</a></p>
 
-<p align="center"><a href="https://nvkudva.github.io/ollajev/#media"><img src="https://raw.githubusercontent.com/nvkudva/ollajev/main/docs/multimodal-poster.jpg" alt="Ollajev: decision models can now see and hear. Images, audio and video with Clef-Omni, d1-omni, and Clef on Apple Silicon" width="720"></a></p>
+<p align="center"><a href="https://nvkudva.github.io/ollajev/#new"><img src="https://raw.githubusercontent.com/nvkudva/ollajev/main/docs/vega-poster.jpg" alt="Ollajev 0.4: Vega reads the whole contract. Vega 0.8B is the new default, Vega 4B is one tag away, and Qwen3.5 models run 20-40x faster on the CPU" width="720"></a></p>
+
+> **New in 0.4:** [Vega](https://huggingface.co/nandakishorm/vega-08b-public-intents) is the default model: a
+> trained physics engine on a frozen Qwen3.5, in 0.8B (1.8 GB) and 4B (`:4b`, 9.5 GB) sizes, with a 73,728-token
+> context and image input. Qwen3.5-based PyTorch models answer 20-40x faster on the CPU, errors say what to do next,
+> and idle models make room for a new one. [All changes](CHANGELOG.md#040---2026-10-11).
 
 - **No generated text.** Send one state and any number of typed questions; get a calibrated probability for each, in one forward pass.
-- **Images, audio and video** beside the state, with Clef-Omni, d1-omni, and Clef on Apple Silicon through MLX.
+- **Images, audio and video** beside the state, with Vega, Clef-Omni, d1-omni, and Clef on Apple Silicon through MLX.
 - **Ollama-style workflow:** `pull`, `list`, `run`, `serve`, `ps`, `rm`, plus a terminal model manager and a browser playground.
 - **Drop-in for `typesafe-sdk`:** point `TYPESAFE_BASE_URL` at it; same routes, same request and response shapes.
 

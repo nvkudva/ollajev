@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Ollajev</title>
-<meta name="description" content="Like Ollama, for System One decision models: a terminal UI to browse, search, download and serve models from Hugging Face, behind TypeSafe's /v1/systemone API. Now with images, audio and video.">
+<meta name="description" content="Like Ollama, for System One decision models: a terminal UI to browse, search, download and serve models from Hugging Face, behind TypeSafe's /v1/systemone API. Now with Vega, a 73k-context model that reads images, as the default.">
 <meta name="color-scheme" content="light dark">
 <link rel="icon" type="image/svg+xml" href="logo.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -386,6 +386,11 @@ const SHOTS = {
     width: 1600, height: 1003,
     alt: "The Add a model from Hugging Face dialog after typing jev: 25 models and 101 files with size, download count and runtime. Rows marked with a cross are unsupported and cannot run.",
   },
+  vega: {
+    src: "vega-poster.jpg",
+    width: 3200, height: 1800,
+    alt: "Ollajev: Vega reads the whole contract. New in 0.4, Vega is the default: a trained physics engine on a frozen Qwen3.5, 73,728 tokens and an image in one pass. Cards for Vega 0.8B (default, 1.8 GB), Vega 4B (9.5 GB, the :4b tag) and 20-40x faster CPU inference for Qwen3.5 models.",
+  },
   multimodal: {
     src: "multimodal-poster.jpg",
     width: 3200, height: 1800,
@@ -584,7 +589,7 @@ function Hero() {
         <p class="pitch">Ollajev manages System One decision models from Hugging Face in one terminal screen, then serves them on your machine behind TypeSafe's <code>/v1/systemone</code> API.</p>
         <div class="cta">
           <a class="btn primary" href="#start">Quick start</a>
-          <a class="btn" href="#media">New in 0.3: images, audio, video</a>
+          <a class="btn" href="#new">New in 0.4: Vega, the new default</a>
           <a class="btn" href=${REPO}><${GitHubIcon} />View on GitHub</a>
         </div>
       </div>
@@ -604,7 +609,24 @@ function Hero() {
   </div></section>`;
 }
 
+const NEW_IN_04 = [
+  ["Vega, the new default", "nandakishorm/vega-08b-public-intents", html`A small trained physics engine on a frozen Qwen3.5, with a 73,728-token context and image input. 0.8B is 1.8 GB; add <code>:4b</code> for the 9.5 GB 4B.`],
+  ["20-40x faster on the CPU", "Qwen3.5 on PyTorch", html`Vega, decider, Intern-Decision, OneJev, Kev and JevK5 skip a slow CPU convolution: Vega 0.8B went from 4-8 s to 0.2 s a request.`],
+  ["Errors that say what to do", "422 with guidance", html`A text-only model sent an image names your downloaded models that read images; idle models are unloaded when a new one needs the memory.`],
+];
+
+function WhatsNew() {
+  return html`<${Section} id="new" title="New in 0.4."
+    lede=${html`Upgrade with <code>brew upgrade ollajev</code> or <code>uv tool upgrade ollajev</code>. A default you already picked stays; press <kbd>d</kbd> on Vega in <code>ollajev setup</code> to switch. <a href=${CHANGELOG}>Full changelog</a>.`}>
+    <${Screenshot} shot=${SHOTS.vega} lazy />
+    <div class="types">
+      ${NEW_IN_04.map(([name, by, text]) => html`<div class="type"><code class="name">${by}</code><h3>${name}</h3><p>${text}</p></div>`)}
+    </div>
+  <//>`;
+}
+
 const MEDIA_MODELS = [
+  ["Vega", "nandakishorm, 0.8B and 4B", html`One image per request with choice and noul questions, zero-shot. <code>nandakishorm/vega-08b-public-intents</code> is 1.8 GB.`],
   ["Clef-Omni", "Cloudflare, 30B-A3B MoE", html`Images, audio and video, and it hears a video's soundtrack. <code>mlx-community/clef-omni-4bit</code> runs it on a Mac in 19.8 GB.`],
   ["d1-omni-600M", "Liquid AI, 600M", html`Images or a 30-second voice clip, on an edge-sized model. <code>LiquidAI/d1-omni-600M</code> is 2.3 GB.`],
   ["Clef and Clef-Flash", "Cloudflare, now on MLX", html`Images and video. <code>mlx-community/clef-flash-4bit</code> is 6.2 GB on Apple Silicon.`],
@@ -801,7 +823,7 @@ function Demo() {
   const ex = EXAMPLES[key];
   const on = useArrive(key);
   return html`<${Section} id="demo" title="Try a request."
-    lede="Request and response shapes from the README. With the default model, the Support request takes about 0.4 s warm on an Apple M3 Max laptop: three answers, no tokens generated.">
+    lede="Request and response shapes from the README. With the default model, Vega 0.8B, the Support request takes about 0.3 s warm on an Apple Silicon laptop: three answers, no tokens generated.">
     <${Tabs} items=${keys} value=${key} onChange=${setKey} label="Examples" controls="demo-panel" />
     <div class="demo" id="demo-panel" role="tabpanel" aria-label=${`${key} example`}>
       <div class="panel">
@@ -917,6 +939,7 @@ function App() {
     <${Nav} theme=${theme} setTheme=${setTheme} />
     <main id="main">
       <${Hero} />
+      <${WhatsNew} />
       <${Multimodal} />
       <${LaunchVideo} />
       <${ModelManager} />
