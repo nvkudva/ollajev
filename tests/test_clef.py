@@ -146,3 +146,23 @@ def test_a_snapshot_without_its_marker_script_resolves_from_the_repo_again(tmp_p
     assert store.resolve("mlx-community/clef-flash-4bit").family.name == "clef-mlx"
     with pytest.raises(LookupError):  # offline there is nothing else to go on
         store.resolve("mlx-community/clef-flash-4bit", online=False)
+
+
+def test_mlx_vlm_processor_patch_stays_inside_clef_mlx_loads(monkeypatch):
+    from transformers import AutoProcessor
+
+    from ollajev.adapters import clef_mlx
+
+    monkeypatch.setattr(clef_mlx, "_mlx_from_pretrained", None)
+    original = AutoProcessor.__dict__["from_pretrained"]
+    patch = classmethod(lambda cls, *a, **k: "mlx")
+    try:
+        with clef_mlx._mlx_processors():  # the first load imports mlx-vlm, which swaps the method
+            AutoProcessor.from_pretrained = patch
+            assert AutoProcessor.from_pretrained("x") == "mlx"
+        assert AutoProcessor.__dict__["from_pretrained"] is original  # PyTorch models get transformers' own again
+        with clef_mlx._mlx_processors():  # a later load finds mlx-vlm already imported: the swap is put back
+            assert AutoProcessor.from_pretrained("x") == "mlx"
+        assert AutoProcessor.__dict__["from_pretrained"] is original
+    finally:
+        AutoProcessor.from_pretrained = original

@@ -6,13 +6,36 @@ copies are vendored (ollajev/_vendor/clef_mlx_dense, ollajev/_vendor/clef_mlx), 
 
 from __future__ import annotations
 
+import contextlib
 import platform
 import sys
+from collections.abc import Iterator
 from typing import Any, cast
 
 from .. import media
 from . import clef
 from .base import Loaded
+
+_mlx_from_pretrained: Any = None  # mlx-vlm's AutoProcessor.from_pretrained, once its import installed it
+
+
+@contextlib.contextmanager
+def _mlx_processors() -> Iterator[None]:
+    """mlx-vlm swaps transformers.AutoProcessor.from_pretrained for the whole process when its Qwen3-VL code is first
+    imported, so every PyTorch Qwen3.5 model loaded after a Clef-MLX one (Vega's image path) got mlx-vlm's numpy image
+    processor and failed. The swap holds while a Clef-MLX model loads, which builds its processor then, and no longer."""
+    global _mlx_from_pretrained
+    from transformers import AutoProcessor
+
+    original = AutoProcessor.__dict__["from_pretrained"]
+    if _mlx_from_pretrained is not None:
+        AutoProcessor.from_pretrained = _mlx_from_pretrained
+    try:
+        yield
+    finally:
+        if AutoProcessor.__dict__["from_pretrained"] is not original:
+            _mlx_from_pretrained = AutoProcessor.__dict__["from_pretrained"]
+        AutoProcessor.from_pretrained = original
 
 
 class _ClefMLX:
@@ -33,13 +56,14 @@ class _ClefMLX:
     def load(self, path: str, resolved, device: str | None) -> Loaded:
         if sys.platform != "darwin" or platform.machine() != "arm64":
             raise ValueError(f"{resolved.name} runs on MLX, which needs a Mac with Apple Silicon")
-        from .._vendor.clef_mlx import clef_mlx as omni_runtime
-        from .._vendor.clef_mlx_dense import clef_mlx as dense_runtime
+        with _mlx_processors():
+            from .._vendor.clef_mlx import clef_mlx as omni_runtime
+            from .._vendor.clef_mlx_dense import clef_mlx as dense_runtime
 
-        omni = clef.is_omni(path)
-        runtime: Any = omni_runtime if omni else dense_runtime
+            omni = clef.is_omni(path)
+            runtime: Any = omni_runtime if omni else dense_runtime
+            model = runtime.load(path)
         limits = clef.OMNI_LIMITS if omni else clef.LIMITS
-        model = runtime.load(path)
 
         def predict(state: Any, questions: dict[str, dict[str, Any]], images=(), audio=(), videos=()) -> dict[str, Any]:
             rec = clef.record(state, questions)
